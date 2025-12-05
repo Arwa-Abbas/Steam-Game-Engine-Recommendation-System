@@ -34,29 +34,42 @@ class GameRecommender:
             
             # Add tags
             if game.get('tags'):
-                features.extend(game['tags'])
+                features.extend([tag.lower() for tag in game['tags']])
             
             # Add categories
             if game.get('categories'):
-                features.extend(game['categories'])
+                features.extend([cat.lower() for cat in game['categories']])
             
             # Add game features
             if game.get('features'):
-                features.extend(game['features'])
+                features.extend([feat.lower() for feat in game['features']])
             
             # Add keywords from description
             if game.get('description_keywords'):
-                features.extend(game['description_keywords'])
+                features.extend([kw.lower() for kw in game['description_keywords']])
             
             # Add technical features
             if game.get('os_type'):
-                features.append(f"os_{game['os_type']}")
+                features.append(f"os_{game['os_type'].lower()}")
             if game.get('gpu_brand'):
-                features.append(f"gpu_{game['gpu_brand']}")
+                features.append(f"gpu_{game['gpu_brand'].lower()}")
             if game.get('cpu_brand'):
-                features.append(f"cpu_{game['cpu_brand']}")
+                features.append(f"cpu_{game['cpu_brand'].lower()}")
             if game.get('price_category'):
-                features.append(f"price_{game['price_category']}")
+                features.append(f"price_{game['price_category'].lower()}")
+            
+            # Add price bucket for better matching
+            price = game.get('original_price', 0)
+            if price == 0:
+                features.append("price_free")
+            elif price < 10:
+                features.append("price_cheap")
+            elif price < 30:
+                features.append("price_mid")
+            elif price < 60:
+                features.append("price_expensive")
+            else:
+                features.append("price_premium")
             
             # Create feature string
             feature_string = ' '.join(features)
@@ -95,6 +108,7 @@ class GameRecommender:
                 break
         
         if game_index is None:
+            print(f"⚠️ Game '{game_title}' not found in database")
             return []
         
         # Get similarity scores
@@ -121,13 +135,15 @@ class GameRecommender:
         if not self.games:
             self.load_games()
         
+        print(f"🎯 Getting recommendations for preferences: {user_preferences}")
+        
         scored_games = []
         
         for game in self.games:
             score = self.calculate_preference_score(game, user_preferences)
             
             # Only include games that meet minimum requirements
-            if score['total_score'] > 0.3:  # Minimum threshold
+            if score['total_score'] > 0.1:  # Lower threshold
                 scored_games.append({
                     'game': game,
                     'score': score['total_score'],
@@ -137,6 +153,8 @@ class GameRecommender:
         # Sort by total score
         scored_games.sort(key=lambda x: x['score'], reverse=True)
         
+        print(f"📈 Found {len(scored_games)} games meeting criteria")
+        
         return scored_games[:top_n]
     
     def calculate_preference_score(self, game: Dict, preferences: Dict) -> Dict:
@@ -145,6 +163,7 @@ class GameRecommender:
         """
         scores = {
             'tag_match': 0,
+            'category_match': 0,
             'price_match': 0,
             'system_match': 0,
             'sentiment_score': 0,
@@ -153,52 +172,74 @@ class GameRecommender:
         }
         
         weights = {
-            'tag_match': 0.35,
+            'tag_match': 0.30,
+            'category_match': 0.20,
             'price_match': 0.25,
-            'system_match': 0.15,
-            'sentiment_score': 0.15,
-            'popularity_score': 0.10
+            'system_match': 0.10,
+            'sentiment_score': 0.10,
+            'popularity_score': 0.05
         }
         
-        # 1. Tag matching (35%)
+        # 1. TAG MATCHING (30%)
         if preferences.get('preferred_tags'):
             user_tags = set([t.lower() for t in preferences['preferred_tags']])
             game_tags = set([t.lower() for t in game.get('tags', [])])
-            tag_intersection = len(user_tags.intersection(game_tags))
-            scores['tag_match'] = min(tag_intersection / max(len(user_tags), 1), 1.0)
+            
+            if user_tags and game_tags:
+                tag_intersection = len(user_tags.intersection(game_tags))
+                scores['tag_match'] = min(tag_intersection / max(len(user_tags), 1), 1.0)
         
-        # 2. Price matching (25%)
+        # 2. CATEGORY MATCHING (20%)
+        if preferences.get('preferred_categories'):
+            user_cats = set([c.lower() for c in preferences['preferred_categories']])
+            game_cats = set([c.lower() for c in game.get('categories', [])])
+            
+            if user_cats and game_cats:
+                cat_intersection = len(user_cats.intersection(game_cats))
+                scores['category_match'] = min(cat_intersection / max(len(user_cats), 1), 1.0)
+        
+        # 3. PRICE MATCHING - FIXED! (25%)
         max_price = preferences.get('max_price', 100)
         game_price = game.get('original_price', 0)
         
-        if game_price <= max_price:
-            # Lower price within budget gets higher score
-            scores['price_match'] = 1.0 - (game_price / max_price)
-        else:
-            scores['price_match'] = 0
+        if max_price > 0:  # Only calculate if max_price is valid
+            if game_price <= max_price:
+                # Normalize: cheaper games get higher scores
+                if max_price > 0:
+                    scores['price_match'] = 1.0 - (game_price / max_price)
+                else:
+                    scores['price_match'] = 1.0
+            else:
+                scores['price_match'] = 0
         
-        # 3. System requirements matching (15%)
+        # 4. System requirements matching (10%)
         if preferences.get('system_specs'):
             system_match = self.check_system_compatibility(game, preferences['system_specs'])
             scores['system_match'] = 1.0 if system_match else 0
+        else:
+            scores['system_match'] = 1.0  # If no specs provided, assume compatible
         
-        # 4. Sentiment score (15%)
+        # 5. Sentiment score (10%)
         sentiment = game.get('overall_sentiment_score', 0.5)
-        min_sentiment = preferences.get('min_sentiment', 0.5)
+        min_sentiment = preferences.get('min_sentiment', 0.0)
         if sentiment >= min_sentiment:
+            # Normalize sentiment score
             scores['sentiment_score'] = sentiment
+        else:
+            scores['sentiment_score'] = 0
         
-        # 5. Popularity score (10%)
+        # 6. Popularity score (5%)
         popularity = game.get('popularity_score', 0.3)
         min_popularity = preferences.get('min_popularity', 0.0)
         if popularity >= min_popularity:
             scores['popularity_score'] = popularity
+        else:
+            scores['popularity_score'] = 0
         
         # Calculate weighted total score
         total_score = 0
-        for key in scores:
-            if key != 'total_score':
-                total_score += scores[key] * weights.get(key, 0)
+        for key, weight in weights.items():
+            total_score += scores[key] * weight
         
         scores['total_score'] = min(total_score, 1.0)
         
@@ -215,9 +256,13 @@ class GameRecommender:
             if game['memory_gb'] > user_specs['memory_gb']:
                 return False
         
-        # Check OS
+        # Check OS - only fail if specifically incompatible
         if 'os_type' in user_specs and game.get('os_type'):
-            if user_specs['os_type'] == 'windows' and game['os_type'] != 'windows':
+            user_os = user_specs['os_type'].lower()
+            game_os = game['os_type'].lower()
+            
+            # Windows can't run Mac/Linux games
+            if user_os == 'windows' and game_os in ['mac', 'linux']:
                 return False
         
         # Check storage (optional)
@@ -231,22 +276,29 @@ class GameRecommender:
         """Generate explanation for why a game was recommended"""
         explanations = []
         
-        if score_breakdown['tag_match'] > 0.7:
-            explanations.append("Perfect match for your interests")
-        elif score_breakdown['tag_match'] > 0.4:
-            explanations.append("Matches some of your interests")
+        if score_breakdown['tag_match'] > 0.8:
+            explanations.append("Perfect match for your tag preferences")
+        elif score_breakdown['tag_match'] > 0.5:
+            explanations.append("Good match with your interests")
+        elif score_breakdown['tag_match'] > 0.2:
+            explanations.append("Some matching tags found")
         
-        if score_breakdown['price_match'] > 0.8:
-            explanations.append("Great value for money")
+        if score_breakdown['category_match'] > 0.5:
+            explanations.append("Matches your preferred categories")
+        
+        if score_breakdown['price_match'] > 0.9:
+            explanations.append("Excellent value within your budget")
+        elif score_breakdown['price_match'] > 0.7:
+            explanations.append("Good price for your budget")
         elif game.get('original_price', 0) == 0:
-            explanations.append("Free to play")
+            explanations.append("Free to play - no cost")
         
-        if game.get('overall_sentiment_score', 0) > 0.8:
-            explanations.append("Highly rated by players")
-        elif game.get('overall_sentiment_score', 0) > 0.7:
-            explanations.append("Well received by players")
+        if game.get('overall_sentiment_score', 0) > 0.85:
+            explanations.append("Exceptional player ratings")
+        elif game.get('overall_sentiment_score', 0) > 0.75:
+            explanations.append("Highly rated by the community")
         
-        if game.get('popularity_score', 0) > 0.7:
-            explanations.append("Very popular choice")
+        if game.get('popularity_score', 0) > 0.8:
+            explanations.append("Very popular choice among players")
         
         return explanations[:3]  # Return top 3 explanations
