@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -7,7 +7,6 @@ import json
 from bson import json_util
 from contextlib import asynccontextmanager
 
-# Import your modules
 from config import PORT
 from src.db import db
 from src.recommender import GameRecommender
@@ -16,80 +15,76 @@ from src.recommender import GameRecommender
 recommender = GameRecommender(db)
 
 # Pydantic models
+class SystemSpecs(BaseModel):
+    memory_gb: Optional[int] = None
+    storage_gb: Optional[int] = None
+    os_type: Optional[str] = None
+
 class UserPreferences(BaseModel):
-    max_price: float = 100.0
+    max_price: float = 50.0
     preferred_tags: List[str] = []
-    preferred_categories: List[str] = []
-    min_sentiment: float = 0.6
-    min_popularity: float = 0.3
-    system_specs: Optional[Dict[str, Any]] = {}
+    languages: List[str] = []
+    developers: List[str] = []
+    publishers: List[str] = []
+    system_specs: Optional[SystemSpecs] = None
 
 class RecommendationRequest(BaseModel):
     preferences: UserPreferences
     limit: int = 10
 
-class FilterRequest(BaseModel):
-    tags: Optional[List[str]] = []
-    min_price: float = 0
-    max_price: float = 1000
-    min_sentiment: float = 0.0
-    min_popularity: float = 0.0
-    categories: Optional[List[str]] = []
-    limit: int = 20
-
-# Lifespan handler to replace deprecated on_event
+# Lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize on startup, cleanup on shutdown"""
     print("🚀 Starting Game Recommendation API...")
-    print("📊 Initializing recommendation system...")
+    print("📊 Loading recommendation model...")
     
-    # Load and prepare games
-    recommender.load_games()
-    recommender.prepare_features()
+    # Load pre-trained model or train new one
+    recommender.load_model()
     
     print("✅ Recommendation system ready!")
     
-    yield  # App runs here
+    yield
     
-    # Cleanup on shutdown (optional)
-    print("👋 Shutting down recommendation system...")
+    print("👋 Shutting down...")
 
 app = FastAPI(
     title="Game Recommendation API",
     description="Knowledge-based game recommendation system",
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan
 )
 
-# CORS configuration
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Helper function to convert MongoDB data
 def convert_mongo_data(data):
-    """Convert MongoDB documents to JSON serializable format"""
+    """Convert MongoDB documents to JSON"""
     return json.loads(json_util.dumps(data))
 
 @app.get("/")
 def root():
     return {
-        "message": "Game Recommendation API v2.0",
+        "message": "Game Recommendation API v3.0",
+        "status": "running",
         "endpoints": {
-            "GET /health": "Check API health",
-            "GET /games": "Browse games with pagination",
-            "GET /games/search": "Search games by title",
-            "GET /games/filter": "Filter games by criteria",
-            "POST /recommend/preferences": "Get recommendations based on preferences",
-            "GET /recommend/similar/{game_title}": "Get similar games",
-            "GET /stats": "Get database statistics",
-            "GET /tags": "Get all unique tags",
-            "GET /categories": "Get all unique categories"
+            "GET /health": "Health check",
+            "GET /games": "Browse all games",
+            "GET /games/search": "Search by title",
+            "POST /games/filter": "Filter by criteria",
+            "POST /recommend": "Get personalized recommendations",
+            "GET /similar/{title}": "Find similar games",
+            "GET /stats": "Database statistics",
+            "GET /tags": "All available tags",
+            "GET /languages": "All supported languages",
+            "GET /developers": "All developers",
+            "POST /retrain": "Retrain recommendation model"
         }
     }
 
@@ -98,42 +93,27 @@ def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "games_loaded": len(recommender.games)
+        "games_loaded": len(recommender.games),
+        "model_trained": recommender.similarity_matrix is not None
     }
 
 @app.get("/games")
 def get_games(
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("popularity_score", enum=[
         "popularity_score", "overall_sentiment_score", 
-        "original_price", "all_reviews_count", "release_year"
+        "original_price", "all_reviews_count", "title"
     ]),
     sort_order: int = Query(-1, enum=[1, -1])
 ):
-    """Get paginated games with sorting"""
+    """Get paginated games"""
     skip = (page - 1) * limit
-    
-    # Build sort field
-    sort_field = sort_by
-    if sort_by == "release_year" and sort_order == -1:
-        sort_field = "release_year"
     
     games = list(db.steam_games.find(
         {},
-        {
-            "_id": 0,
-            "title": 1,
-            "original_price": 1,
-            "overall_sentiment_score": 1,
-            "popularity_score": 1,
-            "tags": 1,
-            "developer": 1,
-            "release_year": 1,
-            "categories": 1,
-            "all_reviews_count": 1
-        }
-    ).sort(sort_field, sort_order).skip(skip).limit(limit))
+        {"_id": 0}
+    ).sort(sort_by, sort_order).skip(skip).limit(limit))
     
     total = db.steam_games.count_documents({})
     
@@ -147,22 +127,13 @@ def get_games(
 
 @app.get("/games/search")
 def search_games(
-    q: str = Query(..., min_length=2, description="Search query"),
+    q: str = Query(..., min_length=2),
     limit: int = Query(20, ge=1, le=50)
 ):
-    """Search games by title (case-insensitive)"""
+    """Search games by title"""
     games = list(db.steam_games.find(
         {"title_lower": {"$regex": q.lower(), "$options": "i"}},
-        {
-            "_id": 0,
-            "title": 1,
-            "original_price": 1,
-            "overall_sentiment_score": 1,
-            "popularity_score": 1,
-            "tags": 1,
-            "developer": 1,
-            "release_year": 1
-        }
+        {"_id": 0}
     ).limit(limit))
     
     return {
@@ -172,201 +143,228 @@ def search_games(
     }
 
 @app.post("/games/filter")
-def filter_games(filter_request: FilterRequest):
-    """Filter games by multiple criteria"""
+def filter_games(
+    tags: List[str] = [],
+    min_price: float = 0,
+    max_price: float = 1000,
+    languages: List[str] = [],
+    categories: List[str] = [],
+    limit: int = 20
+):
+    """Filter games by criteria"""
     query = {}
     
-    # Price filter
-    query["original_price"] = {"$gte": filter_request.min_price, "$lte": filter_request.max_price}
+    # Price
+    query["discounted_price"] = {"$gte": min_price, "$lte": max_price}
     
-    # Sentiment filter
-    if filter_request.min_sentiment > 0:
-        query["overall_sentiment_score"] = {"$gte": filter_request.min_sentiment}
+    # Tags
+    if tags:
+        query["tags"] = {"$in": [tag.lower() for tag in tags]}
     
-    # Popularity filter
-    if filter_request.min_popularity > 0:
-        query["popularity_score"] = {"$gte": filter_request.min_popularity}
+    # Languages
+    if languages:
+        query["languages"] = {"$in": [lang.lower() for lang in languages]}
     
-    # Tags filter
-    if filter_request.tags:
-        query["tags"] = {"$in": [tag.lower() for tag in filter_request.tags]}
-    
-    # Categories filter
-    if filter_request.categories:
-        query["categories"] = {"$in": [cat.lower() for cat in filter_request.categories]}
+    # Categories
+    if categories:
+        query["categories"] = {"$in": [cat.lower() for cat in categories]}
     
     games = list(db.steam_games.find(
         query,
-        {
-            "_id": 0,
-            "title": 1,
-            "original_price": 1,
-            "overall_sentiment_score": 1,
-            "popularity_score": 1,
-            "tags": 1,
-            "developer": 1,
-            "release_year": 1,
-            "categories": 1
-        }
-    ).sort("popularity_score", -1).limit(filter_request.limit))
+        {"_id": 0}
+    ).sort("popularity_score", -1).limit(limit))
     
     return {
-        "filters": filter_request.dict(),
+        "filters": {
+            "tags": tags,
+            "price_range": [min_price, max_price],
+            "languages": languages,
+            "categories": categories
+        },
         "count": len(games),
         "games": convert_mongo_data(games)
     }
 
-@app.post("/recommend/preferences")
-def recommend_by_preferences(request: RecommendationRequest):
-    """Get personalized recommendations based on user preferences"""
+@app.post("/recommend")
+def get_recommendations(request: RecommendationRequest):
+    """Get personalized game recommendations"""
     try:
+        # Convert preferences to dict
+        prefs_dict = request.preferences.dict()
+        
+        # Convert SystemSpecs to dict if present
+        if prefs_dict.get('system_specs'):
+            prefs_dict['system_specs'] = prefs_dict['system_specs']
+        
+        print(f"🎯 Preferences received: {prefs_dict}")
+        
         recommendations = recommender.recommend_by_preferences(
-            request.preferences.dict(),
+            prefs_dict,
             request.limit
         )
         
         if not recommendations:
             return {
                 "recommendations": [],
-                "message": "No games match your preferences. Try relaxing your criteria."
+                "count": 0,
+                "message": "No games match your criteria. Try adjusting your preferences."
             }
         
-        formatted_recommendations = []
+        # Format recommendations
+        formatted = []
         for rec in recommendations:
             game = rec['game']
             explanations = recommender.get_explanation(game, rec['score_breakdown'])
             
-            formatted_recommendations.append({
-                "title": game.get("title", "Unknown"),
+            formatted.append({
+                "title": game.get("title"),
+                "price": game.get("discounted_price", game.get("original_price", 0)),
+                "original_price": game.get("original_price", 0),
+                "discount": game.get("discount_percentage", 0),
                 "score": round(rec['score'], 3),
-                "price": game.get("original_price", 0),
                 "sentiment": game.get("overall_sentiment_score", 0.5),
                 "popularity": game.get("popularity_score", 0.3),
+                "reviews_count": game.get("all_reviews_count", 0),
                 "tags": game.get("tags", [])[:5],
                 "categories": game.get("categories", []),
-                "developer": game.get("developer", "Unknown"),
+                "features": game.get("features", [])[:3],
+                "languages": game.get("languages", [])[:5],
+                "developer": game.get("developer"),
+                "publisher": game.get("publisher"),
                 "release_year": game.get("release_year"),
+                "link": game.get("link"),
                 "explanations": explanations,
-                "score_breakdown": rec['score_breakdown']
+                "score_breakdown": rec['score_breakdown'],
+                "memory_gb": game.get("memory_gb"),
+                "storage_gb": game.get("storage_gb"),
+                "os_type": game.get("os_type")
             })
         
         return {
-            "recommendations": formatted_recommendations,
-            "count": len(formatted_recommendations),
-            "preferences_used": request.preferences.dict()
+            "recommendations": formatted,
+            "count": len(formatted),
+            "preferences_used": prefs_dict
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Recommendation error: {str(e)}")
+        print(f"❌ Recommendation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/recommend/similar/{game_title}")
-def recommend_similar_games(
+@app.get("/similar/{game_title}")
+def get_similar_games(
     game_title: str,
     limit: int = Query(5, ge=1, le=20)
 ):
-    """Get games similar to a specific game"""
+    """Find similar games"""
     try:
-        recommendations = recommender.recommend_by_game(game_title, limit)
+        recommendations = recommender.recommend_similar_games(game_title, limit)
         
         if not recommendations:
-            # Fallback: find games with similar tags
-            game = db.steam_games.find_one({"title_lower": game_title.lower()})
-            if not game:
-                raise HTTPException(status_code=404, detail=f"Game '{game_title}' not found")
-            
-            # Find games with common tags
-            common_tags = game.get('tags', [])[:3]
-            if common_tags:
-                similar_games = list(db.steam_games.find(
-                    {
-                        "title_lower": {"$ne": game_title.lower()},
-                        "tags": {"$in": common_tags}
-                    },
-                    {"_id": 0}
-                ).limit(limit))
-                
-                recommendations = [
-                    {"game": g, "similarity_score": 0.5} 
-                    for g in similar_games
-                ]
+            raise HTTPException(status_code=404, detail=f"Game '{game_title}' not found")
         
-        formatted_recommendations = []
+        formatted = []
         for rec in recommendations:
             game = rec['game']
-            formatted_recommendations.append({
-                "title": game.get("title", "Unknown"),
-                "similarity_score": round(rec['similarity_score'], 3),
-                "price": game.get("original_price", 0),
+            formatted.append({
+                "title": game.get("title"),
+                "similarity": round(rec['similarity_score'], 3),
+                "price": game.get("discounted_price", game.get("original_price", 0)),
                 "sentiment": game.get("overall_sentiment_score", 0.5),
                 "tags": game.get("tags", [])[:5],
-                "developer": game.get("developer", "Unknown")
+                "developer": game.get("developer")
             })
         
         return {
             "source_game": game_title,
-            "recommendations": formatted_recommendations,
-            "count": len(formatted_recommendations)
+            "recommendations": formatted,
+            "count": len(formatted)
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error finding similar games: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/stats")
 def get_stats():
-    """Get database statistics"""
-    total_games = db.steam_games.count_documents({})
+    """Database statistics"""
+    total = db.steam_games.count_documents({})
     
-    # Price statistics
-    price_stats = list(db.steam_games.aggregate([
+    # Price stats
+    price_pipeline = [
         {"$group": {
             "_id": None,
-            "avg_price": {"$avg": "$original_price"},
-            "max_price": {"$max": "$original_price"},
-            "min_price": {"$min": "$original_price"},
-            "free_games": {"$sum": {"$cond": [{"$eq": ["$original_price", 0]}, 1, 0]}}
+            "avg_price": {"$avg": "$discounted_price"},
+            "max_price": {"$max": "$discounted_price"},
+            "min_price": {"$min": "$discounted_price"},
+            "free_games": {"$sum": {"$cond": [{"$eq": ["$discounted_price", 0]}, 1, 0]}}
         }}
-    ]))
+    ]
+    price_stats = list(db.steam_games.aggregate(price_pipeline))
     
-    # Tag statistics
-    top_tags = list(db.steam_games.aggregate([
+    # Top tags
+    tag_pipeline = [
         {"$unwind": "$tags"},
         {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
-        {"$limit": 15}
-    ]))
+        {"$limit": 20}
+    ]
+    top_tags = list(db.steam_games.aggregate(tag_pipeline))
     
-    # Sentiment distribution
-    sentiment_stats = list(db.steam_games.aggregate([
-        {"$bucket": {
-            "groupBy": "$overall_sentiment_score",
-            "boundaries": [0, 0.3, 0.5, 0.7, 0.9, 1.0],
-            "default": "other",
-            "output": {
-                "count": {"$sum": 1}
-            }
-        }}
-    ]))
+    # Top languages
+    lang_pipeline = [
+        {"$unwind": "$languages"},
+        {"$group": {"_id": "$languages", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]
+    top_languages = list(db.steam_games.aggregate(lang_pipeline))
     
     return {
-        "total_games": total_games,
-        "price_statistics": price_stats[0] if price_stats else {},
+        "total_games": total,
+        "price_stats": price_stats[0] if price_stats else {},
         "top_tags": top_tags,
-        "sentiment_distribution": sentiment_stats
+        "top_languages": top_languages
     }
 
 @app.get("/tags")
-def get_all_tags(limit: int = Query(50, ge=1, le=100)):
+def get_tags():
     """Get all unique tags"""
     tags = db.steam_games.distinct("tags")
-    return {"tags": sorted(tags)[:limit], "count": len(tags)}
+    return {"tags": sorted(tags), "count": len(tags)}
 
-@app.get("/categories")
-def get_all_categories():
-    """Get all unique categories"""
-    categories = db.steam_games.distinct("categories")
-    return {"categories": sorted(categories), "count": len(categories)}
+@app.get("/languages")
+def get_languages():
+    """Get all supported languages"""
+    languages = db.steam_games.distinct("languages")
+    return {"languages": sorted(languages), "count": len(languages)}
+
+@app.get("/developers")
+def get_developers():
+    """Get all developers"""
+    developers = db.steam_games.distinct("developer")
+    return {"developers": sorted([d for d in developers if d]), "count": len(developers)}
+
+@app.get("/publishers")
+def get_publishers():
+    """Get all publishers"""
+    publishers = db.steam_games.distinct("publisher")
+    return {"publishers": sorted([p for p in publishers if p]), "count": len(publishers)}
+
+@app.post("/retrain")
+def retrain_model():
+    """Retrain the recommendation model"""
+    try:
+        recommender.train_and_save_model()
+        return {
+            "status": "success",
+            "message": "Model retrained successfully",
+            "games_count": len(recommender.games)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

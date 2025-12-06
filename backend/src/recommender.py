@@ -1,19 +1,23 @@
 import numpy as np
+import pickle
+import os
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MinMaxScaler
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 
 class GameRecommender:
-    """Knowledge-based recommendation system for games"""
+    """Enhanced knowledge-based recommendation system for games"""
     
     def __init__(self, db_connection):
         self.db = db_connection
         self.games = []
-        self.game_features = []
-        self.tfidf_vectorizer = TfidfVectorizer(max_features=1000)
+        self.game_features = None
+        self.tfidf_vectorizer = TfidfVectorizer(max_features=1000, ngram_range=(1, 2))
         self.scaler = MinMaxScaler()
+        self.similarity_matrix = None
+        self.model_path = "models/recommender_model.pkl"
         
     def load_games(self):
         """Load games from MongoDB"""
@@ -22,56 +26,87 @@ class GameRecommender:
         return self.games
     
     def prepare_features(self):
-        """Prepare feature vectors for similarity calculation"""
+        """Prepare enhanced feature vectors for similarity calculation"""
         if not self.games:
             self.load_games()
         
         feature_strings = []
         
         for game in self.games:
-            # Initialize features list for each game
             features = []
             
-            # Add tags
+            # Tags (high weight - repeat 3 times)
             if game.get('tags'):
-                features.extend([tag.lower() for tag in game['tags']])
+                tags = [tag.lower() for tag in game['tags']]
+                features.extend(tags * 3)
             
-            # Add categories
+            # Categories (medium weight - repeat 2 times)
             if game.get('categories'):
-                features.extend([cat.lower() for cat in game['categories']])
+                cats = [cat.lower() for cat in game['categories']]
+                features.extend(cats * 2)
             
-            # Add game features
+            # Features (medium weight)
             if game.get('features'):
-                features.extend([feat.lower() for feat in game['features']])
+                feats = [feat.lower() for feat in game['features']]
+                features.extend(feats * 2)
             
-            # Add keywords from description
-            if game.get('description_keywords'):
-                features.extend([kw.lower() for kw in game['description_keywords']])
+            # Languages (important for accessibility)
+            if game.get('languages'):
+                langs = [f"lang_{lang.lower()}" for lang in game['languages']]
+                features.extend(langs)
             
-            # Add technical features
-            if game.get('os_type'):
-                features.append(f"os_{game['os_type'].lower()}")
-            if game.get('gpu_brand'):
-                features.append(f"gpu_{game['gpu_brand'].lower()}")
-            if game.get('cpu_brand'):
-                features.append(f"cpu_{game['cpu_brand'].lower()}")
-            if game.get('price_category'):
-                features.append(f"price_{game['price_category'].lower()}")
+            # Developer and Publisher
+            if game.get('developer'):
+                features.append(f"dev_{game['developer'].lower()}")
+            if game.get('publisher'):
+                features.append(f"pub_{game['publisher'].lower()}")
             
-            # Add price bucket for better matching
-            price = game.get('original_price', 0)
+            # Price category (exact match for budget)
+            price = game.get('discounted_price', game.get('original_price', 0))
             if price == 0:
-                features.append("price_free")
-            elif price < 10:
-                features.append("price_cheap")
-            elif price < 30:
-                features.append("price_mid")
-            elif price < 60:
-                features.append("price_expensive")
+                features.extend(["price_free", "price_0"] * 3)  # High weight for free
+            elif price <= 5:
+                features.extend(["price_budget", "price_5"] * 2)
+            elif price <= 10:
+                features.extend(["price_budget", "price_10"] * 2)
+            elif price <= 20:
+                features.extend(["price_mid", "price_20"])
+            elif price <= 30:
+                features.extend(["price_mid", "price_30"])
+            elif price <= 50:
+                features.extend(["price_premium", "price_50"])
             else:
-                features.append("price_premium")
+                features.extend(["price_expensive", "price_60plus"])
             
-            # Create feature string
+            # System requirements (OS, specs)
+            if game.get('os_type'):
+                features.extend([f"os_{game['os_type'].lower()}"] * 2)
+            if game.get('memory_gb'):
+                mem = game['memory_gb']
+                features.append(f"ram_{mem}gb")
+                if mem <= 4:
+                    features.append("ram_low")
+                elif mem <= 8:
+                    features.append("ram_mid")
+                else:
+                    features.append("ram_high")
+            
+            # Quality indicators (reviews/sentiment)
+            reviews = game.get('all_reviews_count', 0)
+            if reviews > 10000:
+                features.extend(["popular", "well_reviewed"])
+            
+            sentiment = game.get('overall_sentiment_score', 0.5)
+            if sentiment >= 0.8:
+                features.extend(["highly_rated", "positive_reviews"] * 2)
+            elif sentiment >= 0.7:
+                features.append("positive_reviews")
+            
+            # Keywords from description
+            if game.get('description_keywords'):
+                keywords = [kw.lower() for kw in game['description_keywords'][:10]]
+                features.extend(keywords)
+            
             feature_string = ' '.join(features)
             feature_strings.append(feature_string)
         
@@ -86,21 +121,223 @@ class GameRecommender:
         return self.game_features
     
     def calculate_similarity_matrix(self):
-        """Calculate cosine similarity between all games"""
-        if not hasattr(self, 'game_features') or self.game_features.size == 0:
+        """Calculate and cache similarity matrix"""
+        if self.game_features is None or self.game_features.size == 0:
             self.prepare_features()
         
         if self.game_features.size == 0:
             print("⚠️ No features available for similarity calculation")
             return np.array([])
         
-        similarity_matrix = cosine_similarity(self.game_features)
-        print(f"✅ Similarity matrix shape: {similarity_matrix.shape}")
-        return similarity_matrix
+        self.similarity_matrix = cosine_similarity(self.game_features)
+        print(f"✅ Similarity matrix shape: {self.similarity_matrix.shape}")
+        return self.similarity_matrix
     
-    def recommend_by_game(self, game_title: str, top_n: int = 5):
-        """Recommend games similar to a specific game"""
-        # Find the game index
+    def train_and_save_model(self):
+        """Train the model and save for quick loading"""
+        print("🎓 Training recommendation model...")
+        
+        self.load_games()
+        self.prepare_features()
+        self.calculate_similarity_matrix()
+        
+        # Create models directory
+        os.makedirs("models", exist_ok=True)
+        
+        # Save model components
+        model_data = {
+            'games': self.games,
+            'game_features': self.game_features,
+            'similarity_matrix': self.similarity_matrix,
+            'tfidf_vectorizer': self.tfidf_vectorizer,
+            'scaler': self.scaler
+        }
+        
+        with open(self.model_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        print(f"✅ Model saved to {self.model_path}")
+        return True
+    
+    def load_model(self):
+        """Load pre-trained model"""
+        if not os.path.exists(self.model_path):
+            print("⚠️ No saved model found. Training new model...")
+            return self.train_and_save_model()
+        
+        try:
+            print("📂 Loading pre-trained model...")
+            with open(self.model_path, 'rb') as f:
+                model_data = pickle.load(f)
+            
+            self.games = model_data['games']
+            self.game_features = model_data['game_features']
+            self.similarity_matrix = model_data['similarity_matrix']
+            self.tfidf_vectorizer = model_data['tfidf_vectorizer']
+            self.scaler = model_data['scaler']
+            
+            print(f"✅ Model loaded successfully ({len(self.games)} games)")
+            return True
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+            print("🔄 Training new model...")
+            return self.train_and_save_model()
+    
+    def recommend_by_preferences(self, user_preferences: Dict[str, Any], top_n: int = 10):
+        """
+        Knowledge-based recommendations with strict filtering
+        """
+        if not self.games:
+            self.load_games()
+        
+        print(f"🎯 Finding games for preferences: {user_preferences}")
+        
+        # STRICT FILTERING FIRST
+        filtered_games = []
+        
+        for game in self.games:
+            # 1. PRICE FILTER (STRICT - use discounted_price)
+            max_price = user_preferences.get('max_price', 1000)
+            game_price = game.get('discounted_price', game.get('original_price', 0))
+            
+            if game_price > max_price:
+                continue
+            
+            # 2. LANGUAGE FILTER (if specified)
+            required_languages = user_preferences.get('languages', [])
+            if required_languages:
+                game_languages = [lang.lower() for lang in game.get('languages', [])]
+                if not any(lang.lower() in game_languages for lang in required_languages):
+                    continue
+            
+            # 3. SYSTEM REQUIREMENTS FILTER
+            system_specs = user_preferences.get('system_specs', {})
+            if system_specs:
+                # Check memory
+                if system_specs.get('memory_gb') and game.get('memory_gb'):
+                    if game['memory_gb'] > system_specs['memory_gb']:
+                        continue
+                
+                # Check OS compatibility
+                if system_specs.get('os_type') and game.get('os_type'):
+                    user_os = system_specs['os_type'].lower()
+                    game_os = game['os_type'].lower()
+                    if user_os == 'windows' and game_os in ['mac', 'linux']:
+                        continue
+                    elif user_os == 'mac' and game_os not in ['mac']:
+                        continue
+                    elif user_os == 'linux' and game_os not in ['linux']:
+                        continue
+                
+                # Check storage
+                if system_specs.get('storage_gb') and game.get('storage_gb'):
+                    if game['storage_gb'] > system_specs['storage_gb']:
+                        continue
+            
+            # 4. DEVELOPER/PUBLISHER FILTER
+            preferred_devs = user_preferences.get('developers', [])
+            preferred_pubs = user_preferences.get('publishers', [])
+            
+            if preferred_devs:
+                game_dev = game.get('developer', '').lower()
+                if not any(dev.lower() in game_dev for dev in preferred_devs):
+                    continue
+            
+            if preferred_pubs:
+                game_pub = game.get('publisher', '').lower()
+                if not any(pub.lower() in game_pub for pub in preferred_pubs):
+                    continue
+            
+            # Game passed all filters
+            filtered_games.append(game)
+        
+        print(f"📊 {len(filtered_games)} games passed filters")
+        
+        if not filtered_games:
+            return []
+        
+        # NOW SCORE THE FILTERED GAMES
+        scored_games = []
+        
+        for game in filtered_games:
+            score = self.calculate_preference_score(game, user_preferences)
+            
+            scored_games.append({
+                'game': game,
+                'score': score['total_score'],
+                'score_breakdown': score
+            })
+        
+        # Sort by score (reviews + tags)
+        scored_games.sort(key=lambda x: x['score'], reverse=True)
+        
+        print(f"✅ Returning top {min(top_n, len(scored_games))} recommendations")
+        
+        return scored_games[:top_n]
+    
+    def calculate_preference_score(self, game: Dict, preferences: Dict) -> Dict:
+        """
+        Calculate match score based on reviews, tags, and features
+        """
+        scores = {
+            'tag_match': 0,
+            'review_quality': 0,
+            'popularity': 0,
+            'total_score': 0
+        }
+        
+        # 1. TAG MATCHING (50% weight)
+        preferred_tags = preferences.get('preferred_tags', [])
+        if preferred_tags:
+            user_tags = set([t.lower() for t in preferred_tags])
+            game_tags = set([t.lower() for t in game.get('tags', [])])
+            
+            if user_tags and game_tags:
+                matches = len(user_tags.intersection(game_tags))
+                scores['tag_match'] = min(matches / len(user_tags), 1.0)
+        else:
+            scores['tag_match'] = 0.5  # Neutral if no tags specified
+        
+        # 2. REVIEW QUALITY (30% weight)
+        # Prioritize games with good reviews
+        sentiment = game.get('overall_sentiment_score', 0.5)
+        review_count = game.get('all_reviews_count', 0)
+        
+        # Normalize review count (log scale)
+        import math
+        if review_count > 0:
+            review_score = min(math.log10(review_count + 1) / 5, 1.0)  # Log scale
+        else:
+            review_score = 0
+        
+        # Combine sentiment and review count
+        scores['review_quality'] = (sentiment * 0.7) + (review_score * 0.3)
+        
+        # 3. POPULARITY (20% weight)
+        popularity = game.get('popularity_score', 0.3)
+        scores['popularity'] = popularity
+        
+        # TOTAL SCORE (weighted)
+        weights = {
+            'tag_match': 0.50,
+            'review_quality': 0.30,
+            'popularity': 0.20
+        }
+        
+        total = 0
+        for key, weight in weights.items():
+            total += scores[key] * weight
+        
+        scores['total_score'] = min(total, 1.0)
+        
+        return scores
+    
+    def recommend_similar_games(self, game_title: str, top_n: int = 5):
+        """Find similar games using pre-computed similarity matrix"""
+        if self.similarity_matrix is None:
+            self.calculate_similarity_matrix()
+        
+        # Find game index
         game_index = None
         for i, game in enumerate(self.games):
             if game['title'].lower() == game_title.lower():
@@ -108,197 +345,48 @@ class GameRecommender:
                 break
         
         if game_index is None:
-            print(f"⚠️ Game '{game_title}' not found in database")
             return []
         
-        # Get similarity scores
-        similarity_matrix = self.calculate_similarity_matrix()
-        
-        if similarity_matrix.size == 0:
-            return []
-        
-        similar_indices = np.argsort(similarity_matrix[game_index])[::-1][1:top_n+1]
+        # Get similar games
+        similar_indices = np.argsort(self.similarity_matrix[game_index])[::-1][1:top_n+1]
         
         recommendations = []
         for idx in similar_indices:
             recommendations.append({
                 'game': self.games[idx],
-                'similarity_score': float(similarity_matrix[game_index][idx])
+                'similarity_score': float(self.similarity_matrix[game_index][idx])
             })
         
         return recommendations
     
-    def recommend_by_preferences(self, user_preferences: Dict[str, Any], top_n: int = 10):
-        """
-        Knowledge-based recommendations based on user preferences
-        """
-        if not self.games:
-            self.load_games()
-        
-        print(f"🎯 Getting recommendations for preferences: {user_preferences}")
-        
-        scored_games = []
-        
-        for game in self.games:
-            score = self.calculate_preference_score(game, user_preferences)
-            
-            # Only include games that meet minimum requirements
-            if score['total_score'] > 0.1:  # Lower threshold
-                scored_games.append({
-                    'game': game,
-                    'score': score['total_score'],
-                    'score_breakdown': score
-                })
-        
-        # Sort by total score
-        scored_games.sort(key=lambda x: x['score'], reverse=True)
-        
-        print(f"📈 Found {len(scored_games)} games meeting criteria")
-        
-        return scored_games[:top_n]
-    
-    def calculate_preference_score(self, game: Dict, preferences: Dict) -> Dict:
-        """
-        Calculate preference match score with detailed breakdown
-        """
-        scores = {
-            'tag_match': 0,
-            'category_match': 0,
-            'price_match': 0,
-            'system_match': 0,
-            'sentiment_score': 0,
-            'popularity_score': 0,
-            'total_score': 0
-        }
-        
-        weights = {
-            'tag_match': 0.30,
-            'category_match': 0.20,
-            'price_match': 0.25,
-            'system_match': 0.10,
-            'sentiment_score': 0.10,
-            'popularity_score': 0.05
-        }
-        
-        # 1. TAG MATCHING (30%)
-        if preferences.get('preferred_tags'):
-            user_tags = set([t.lower() for t in preferences['preferred_tags']])
-            game_tags = set([t.lower() for t in game.get('tags', [])])
-            
-            if user_tags and game_tags:
-                tag_intersection = len(user_tags.intersection(game_tags))
-                scores['tag_match'] = min(tag_intersection / max(len(user_tags), 1), 1.0)
-        
-        # 2. CATEGORY MATCHING (20%)
-        if preferences.get('preferred_categories'):
-            user_cats = set([c.lower() for c in preferences['preferred_categories']])
-            game_cats = set([c.lower() for c in game.get('categories', [])])
-            
-            if user_cats and game_cats:
-                cat_intersection = len(user_cats.intersection(game_cats))
-                scores['category_match'] = min(cat_intersection / max(len(user_cats), 1), 1.0)
-        
-        # 3. PRICE MATCHING - FIXED! (25%)
-        max_price = preferences.get('max_price', 100)
-        game_price = game.get('original_price', 0)
-        
-        if max_price > 0:  # Only calculate if max_price is valid
-            if game_price <= max_price:
-                # Normalize: cheaper games get higher scores
-                if max_price > 0:
-                    scores['price_match'] = 1.0 - (game_price / max_price)
-                else:
-                    scores['price_match'] = 1.0
-            else:
-                scores['price_match'] = 0
-        
-        # 4. System requirements matching (10%)
-        if preferences.get('system_specs'):
-            system_match = self.check_system_compatibility(game, preferences['system_specs'])
-            scores['system_match'] = 1.0 if system_match else 0
-        else:
-            scores['system_match'] = 1.0  # If no specs provided, assume compatible
-        
-        # 5. Sentiment score (10%)
-        sentiment = game.get('overall_sentiment_score', 0.5)
-        min_sentiment = preferences.get('min_sentiment', 0.0)
-        if sentiment >= min_sentiment:
-            # Normalize sentiment score
-            scores['sentiment_score'] = sentiment
-        else:
-            scores['sentiment_score'] = 0
-        
-        # 6. Popularity score (5%)
-        popularity = game.get('popularity_score', 0.3)
-        min_popularity = preferences.get('min_popularity', 0.0)
-        if popularity >= min_popularity:
-            scores['popularity_score'] = popularity
-        else:
-            scores['popularity_score'] = 0
-        
-        # Calculate weighted total score
-        total_score = 0
-        for key, weight in weights.items():
-            total_score += scores[key] * weight
-        
-        scores['total_score'] = min(total_score, 1.0)
-        
-        return scores
-    
-    def check_system_compatibility(self, game: Dict, user_specs: Dict) -> bool:
-        """Check if game requirements match user's system"""
-        # If no specs provided, assume compatible
-        if not user_specs:
-            return True
-        
-        # Check memory
-        if 'memory_gb' in user_specs and game.get('memory_gb'):
-            if game['memory_gb'] > user_specs['memory_gb']:
-                return False
-        
-        # Check OS - only fail if specifically incompatible
-        if 'os_type' in user_specs and game.get('os_type'):
-            user_os = user_specs['os_type'].lower()
-            game_os = game['os_type'].lower()
-            
-            # Windows can't run Mac/Linux games
-            if user_os == 'windows' and game_os in ['mac', 'linux']:
-                return False
-        
-        # Check storage (optional)
-        if 'storage_gb' in user_specs and game.get('storage_gb'):
-            if game['storage_gb'] > user_specs['storage_gb']:
-                return False
-        
-        return True
-    
     def get_explanation(self, game: Dict, score_breakdown: Dict) -> List[str]:
-        """Generate explanation for why a game was recommended"""
+        """Generate explanations for recommendations"""
         explanations = []
         
-        if score_breakdown['tag_match'] > 0.8:
-            explanations.append("Perfect match for your tag preferences")
-        elif score_breakdown['tag_match'] > 0.5:
-            explanations.append("Good match with your interests")
-        elif score_breakdown['tag_match'] > 0.2:
-            explanations.append("Some matching tags found")
+        # Tag match
+        if score_breakdown['tag_match'] > 0.7:
+            explanations.append("Perfect match for your interests")
+        elif score_breakdown['tag_match'] > 0.4:
+            explanations.append("Matches several of your preferences")
         
-        if score_breakdown['category_match'] > 0.5:
-            explanations.append("Matches your preferred categories")
+        # Review quality
+        sentiment = game.get('overall_sentiment_score', 0.5)
+        reviews = game.get('all_reviews_count', 0)
         
-        if score_breakdown['price_match'] > 0.9:
-            explanations.append("Excellent value within your budget")
-        elif score_breakdown['price_match'] > 0.7:
-            explanations.append("Good price for your budget")
-        elif game.get('original_price', 0) == 0:
-            explanations.append("Free to play - no cost")
+        if sentiment >= 0.85 and reviews > 1000:
+            explanations.append("Highly rated with lots of positive reviews")
+        elif sentiment >= 0.75:
+            explanations.append("Well-reviewed by players")
         
-        if game.get('overall_sentiment_score', 0) > 0.85:
-            explanations.append("Exceptional player ratings")
-        elif game.get('overall_sentiment_score', 0) > 0.75:
-            explanations.append("Highly rated by the community")
+        # Price
+        price = game.get('discounted_price', game.get('original_price', 0))
+        if price == 0:
+            explanations.append("Free to play")
+        elif price < 10:
+            explanations.append("Great value for money")
         
-        if game.get('popularity_score', 0) > 0.8:
-            explanations.append("Very popular choice among players")
+        # Popularity
+        if game.get('popularity_score', 0) > 0.7:
+            explanations.append("Very popular among players")
         
-        return explanations[:3]  # Return top 3 explanations
+        return explanations[:3]

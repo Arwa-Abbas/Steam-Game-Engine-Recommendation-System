@@ -4,7 +4,7 @@ import sys
 import os
 from datetime import datetime
 
-# Add the parent directory to Python path
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
@@ -22,6 +22,7 @@ def clean_price(price_str):
     try:
         return float(price_str)
     except:
+   
         return 0.0
 
 def extract_number(review_str):
@@ -44,13 +45,14 @@ def extract_sentiment_from_text(review_summary_text):
     
     text = str(review_summary_text)
     
-    # Look for percentage pattern
+
+    # look for percentage pattern
     match = re.search(r'(\d+)%', text)
     if match:
         percentage = int(match.group(1))
         return percentage / 100  # Convert to 0-1 scale
-    
-    # Fallback: try to infer from text keywords
+
+
     text_lower = text.lower()
     if 'overwhelmingly positive' in text_lower:
         return 0.95
@@ -69,7 +71,8 @@ def extract_sentiment_from_text(review_summary_text):
     elif 'overwhelmingly negative' in text_lower:
         return 0.10
     
-    return 0.5  # Default neutral
+    return 0.5 
+
 
 def get_sentiment_category(score):
     """Convert numeric score to category"""
@@ -90,6 +93,7 @@ def get_sentiment_category(score):
     else:
         return "overwhelmingly_negative"
 
+
 def calculate_popularity_score(all_reviews_count, recent_reviews_count, 
                                all_sentiment_score, recent_sentiment_score):
     """
@@ -103,16 +107,18 @@ def calculate_popularity_score(all_reviews_count, recent_reviews_count,
     # Review count score (logarithmic scale to handle wide ranges)
     # Games with 1M+ reviews should get close to 1.0
     import math
-    max_reviews = 1000000  # 1 million reviews = max score
+    max_reviews = 1000000  #
     review_score = min(1.0, math.log10(all_reviews_count + 1) / math.log10(max_reviews))
     
-    # Recent activity bonus (shows game is still active)
+
+    # Recent activity bonus 
     if all_reviews_count > 0:
         recent_ratio = min(1.0, recent_reviews_count / all_reviews_count * 10)
         activity_bonus = recent_ratio * 0.1  # Up to 10% bonus
     else:
         activity_bonus = 0
     
+
     # Sentiment multiplier (quality factor)
     avg_sentiment = (all_sentiment_score + recent_sentiment_score) / 2
     sentiment_multiplier = 0.5 + (avg_sentiment * 0.5)  # 0.5 to 1.0 range
@@ -122,6 +128,7 @@ def calculate_popularity_score(all_reviews_count, recent_reviews_count,
     final_score = min(1.0, base_popularity + activity_bonus)
     
     return round(final_score, 3)
+
 
 def clean_list_field(field):
     """Parse list field from CSV into Python list"""
@@ -135,6 +142,7 @@ def clean_list_field(field):
         items = [x.strip().lower() for x in field.split(",") if x.strip()]
         return items
     return []
+
 
 def clean_text(text):
     """Clean and normalize text"""
@@ -150,6 +158,7 @@ def extract_keywords_from_text(text, min_length=4):
     if not text or pd.isna(text):
         return []
     
+
     # Common stop words to exclude
     stop_words = {
         'the', 'and', 'for', 'with', 'your', 'you', 'are', 'can', 'will',
@@ -160,9 +169,10 @@ def extract_keywords_from_text(text, min_length=4):
     
     # Clean and tokenize
     text = text.lower()
-    text = re.sub(r'[^\w\s]', ' ', text)  # Remove punctuation
+    text = re.sub(r'[^\w\s]', ' ', text)  
     words = text.split()
-    
+
+
     # Filter keywords
     keywords = [
         word for word in words 
@@ -170,7 +180,8 @@ def extract_keywords_from_text(text, min_length=4):
         and word not in stop_words
         and not word.isdigit()
     ]
-    
+
+
     # Remove duplicates while preserving order
     seen = set()
     unique_keywords = []
@@ -179,7 +190,8 @@ def extract_keywords_from_text(text, min_length=4):
             seen.add(word)
             unique_keywords.append(word)
     
-    return unique_keywords[:20]  # Limit to top 20
+    return unique_keywords[:20]  
+
 
 def parse_system_requirements(requirements_text):
     """
@@ -191,8 +203,9 @@ def parse_system_requirements(requirements_text):
     
     text = str(requirements_text).strip()
     
-    # Just return cleaned raw text (max 500 chars)
+
     return text[:500]
+
 
 def extract_specs_from_requirements(requirements_text):
     """
@@ -244,6 +257,7 @@ def extract_specs_from_requirements(requirements_text):
     elif 'Linux' in text:
         specs["os_type"] = "linux"
     
+
     # Extract GPU brand
     if 'nvidia' in text.lower() or 'gtx' in text.lower() or 'rtx' in text.lower():
         specs["gpu_brand"] = "nvidia"
@@ -252,6 +266,7 @@ def extract_specs_from_requirements(requirements_text):
     elif 'intel' in text.lower() and 'graphics' in text.lower():
         specs["gpu_brand"] = "intel"
     
+
     # Extract CPU brand
     if 'intel' in text.lower() and ('processor' in text.lower() or 'cpu' in text.lower()):
         specs["cpu_brand"] = "intel"
@@ -259,6 +274,7 @@ def extract_specs_from_requirements(requirements_text):
         specs["cpu_brand"] = "amd"
     
     return specs
+
 
 def categorize_game(tags, features, price, description):
     """
@@ -304,6 +320,7 @@ def categorize_game(tags, features, price, description):
     
     return list(set(categories))  
 
+
 def extract_year(date_str):
     """Extract year from date string"""
     if pd.isna(date_str):
@@ -315,31 +332,30 @@ def extract_year(date_str):
         return int(year_match.group(0))
     return None
 
-def load_first_100_records(csv_path="dataset/steam_game_engine.csv", append=False):
-    """
-    Load ONLY the first 100 records from CSV into MongoDB with enhanced processing
-    """
+
+def load_records(csv_path="dataset/steam_game_engine.csv", append=False):
+   
     try:
-        print(f"🔍 Loading from: {csv_path}")
+        print(f"Loading from: {csv_path}")
         
         if not os.path.exists(csv_path):
-            print(f"❌ CSV file not found at {csv_path}")
+            print(f"CSV file not found at {csv_path}")
             return 0
         
         # Drop collection if not appending
         if not append and "steam_games" in db.list_collection_names():
             count_before = db.steam_games.count_documents({})
             db.steam_games.drop()
-            print(f"🗑️  Cleared {count_before} old records")
+            print(f"Cleared {count_before} old records")
         elif append:
-            print(f"📊 Appending to existing data")
+            print(f"Appending to existing data")
         
         df = pd.read_csv(csv_path)
-        print(f"📋 Loaded {len(df)} rows from CSV")
+        print(f"Loaded {len(df)} rows from CSV")
         
         records = []
         
-        print(f"\n🔄 Processing records...\n")
+        print(f"\ Processing records...\n")
         
         for index, row in df.iterrows():
             try:
@@ -479,15 +495,15 @@ def load_first_100_records(csv_path="dataset/steam_game_engine.csv", append=Fals
                         print(f"   Popularity: {popularity:.3f}\n")
                 
             except Exception as e:
-                print(f"⚠️  Skipping row {index} ({row.get('Title', 'Unknown')}): {str(e)[:60]}")
+                print(f"Skipping row {index} ({row.get('Title', 'Unknown')}): {str(e)[:60]}")
                 continue
         
         # Insert to MongoDB
         if records:
             db.steam_games.insert_many(records)
             
-            # Create indexes for faster queries
-            print(f"\n📊 Creating indexes...")
+            # Create indexes
+            print(f"\nCreating indexes...")
             db.steam_games.create_index([("title_lower", 1)])
             db.steam_games.create_index([("tags", 1)])
             db.steam_games.create_index([("keywords", 1)])
@@ -498,11 +514,11 @@ def load_first_100_records(csv_path="dataset/steam_game_engine.csv", append=Fals
             db.steam_games.create_index([("all_reviews_count", -1)])
             
             print(f"\n{'='*60}")
-            print(f"🎉 Successfully loaded {len(records)} records!")
+            print(f"Successfully loaded {len(records)} records!")
             print(f"{'='*60}")
             
             # Show statistics
-            print(f"\n📈 Dataset Statistics:")
+            print(f"\nDataset Statistics:")
             print(f"   • Total games: {len(records)}")
             print(f"   • Free games: {sum(1 for r in records if r['original_price'] == 0)}")
             print(f"   • Paid games: {sum(1 for r in records if r['original_price'] > 0)}")
@@ -519,7 +535,7 @@ def load_first_100_records(csv_path="dataset/steam_game_engine.csv", append=Fals
             print(f"   • Avg sentiment: {sum(sentiment_scores) / len(sentiment_scores):.2f}")
             
             # Show top games by popularity
-            print(f"\n🏆 Top 3 Most Popular Games:\n")
+            print(f"\nTop 3 Most Popular Games:\n")
             top_games = sorted(records, key=lambda x: x['popularity_score'], reverse=True)[:3]
             
             for i, game in enumerate(top_games, 1):
@@ -539,26 +555,25 @@ def load_first_100_records(csv_path="dataset/steam_game_engine.csv", append=Fals
         return 0
         
     except Exception as e:
-        print(f"❌ Error loading data: {str(e)}")
+        print(f"Error loading data: {str(e)}")
         import traceback
         traceback.print_exc()
         return 0
 
-# Run when executed directly
+
 if __name__ == "__main__":
-    print("🎮 Steam Game Data Loader - Enhanced Edition")
+    print(" Steam Game Data Loader")
     print("=" * 60)
-    
-    # Load first 100 records
-    count = load_first_100_records(
+   
+    count = load_records(
         csv_path="dataset/steam_game_engine.csv", 
         append=False
     )
     
     if count > 0:
-        print(f"\n✅ Successfully loaded {count} games into MongoDB!")
+        print(f"\n Successfully loaded {count} games into MongoDB!")
         print(f"💡 Database ready for knowledge-based recommendations")
     else:
-        print(f"\n❌ No records were loaded")
+        print(f"\n No records were loaded")
     
-    print("\n🏁 Loader completed!")
+    print("\nLoader completed!")
