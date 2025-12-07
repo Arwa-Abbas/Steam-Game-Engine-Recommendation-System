@@ -137,11 +137,11 @@ Set overlap for binary features.
 
 ### Memory Efficiency
 
-Sparse TF-IDF (max 800 features)
-Top-K similarity storage
-Chunked processing
-Float16 / UInt16 compression
-Fallback mechanisms for missing data
+- Sparse TF-IDF (max 800 features)
+- Top-K similarity storage
+- Chunked processing
+- Float16 / UInt16 compression
+- Fallback mechanisms for missing data
 
 ---
 
