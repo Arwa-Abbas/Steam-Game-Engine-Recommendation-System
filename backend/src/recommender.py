@@ -35,7 +35,7 @@ class GameRecommender:
         
         # Settings
         self.TOP_K = 50  # Store only top 50 similarities per game
-        self.CHUNK_SIZE = 500  # Process games in chunks (reduced for memory)
+        self.CHUNK_SIZE = 500  # Process games in chunks 
         
         # Load games and index on initialization
         self.load_games_chunked()
@@ -82,10 +82,10 @@ class GameRecommender:
                     if field not in game:
                         game[field] = ''
             
-            print(f"📊 Loaded {len(self.games)} games")
+            print(f"Loaded {len(self.games)} games")
             return self.games
         except Exception as e:
-            print(f"❌ Error loading games: {e}")
+            print(f"Error loading games: {e}")
             self.games = []
             return []
     
@@ -94,19 +94,19 @@ class GameRecommender:
         if not self.games:
             self.load_games_chunked()
         
-        print("🔄 Creating comprehensive features...")
+        print("Creating comprehensive features...")
         
         feature_strings = []
         for game in self.games:
             features = []
             
-            # 1. ALL TAGS (but limit to 15 to avoid memory issues)
+            # ALL TAGS 
             if game.get('tags'):
                 # Take all unique tags, limit to 15 most relevant
                 unique_tags = list(set([str(tag).lower().strip() for tag in game['tags']]))
                 features.extend([f"tag_{tag}" for tag in unique_tags[:15]])
             
-            # 2. Developer and Publisher
+            # Developer and Publisher
             if game.get('developer'):
                 dev_clean = str(game['developer']).lower().strip()
                 if dev_clean:
@@ -117,15 +117,15 @@ class GameRecommender:
                 if pub_clean:
                     features.append(f"pub_{pub_clean}")
             
-            # 3. Release year as feature
+            # Release year as feature
             if game.get('release_year'):
                 features.append(f"year_{game['release_year']}")
             
-            # 4. Game features (single-player, multiplayer, etc.)
+            # Game features (single-player, multiplayer, etc.)
             if game.get('features'):
                 features.extend([f"feature_{str(feat).lower().strip()}" for feat in game['features'][:5]])
             
-            # 5. Price category
+            # Price category
             price = game.get('discounted_price', 0)
             if price == 0:
                 features.append("price_free")
@@ -136,7 +136,7 @@ class GameRecommender:
             else:
                 features.append("price_premium")
             
-            # 6. Sentiment category
+            # Sentiment category
             sentiment = game.get('overall_sentiment_score', 0.5)
             if sentiment >= 0.8:
                 features.append("sentiment_very_positive")
@@ -147,7 +147,7 @@ class GameRecommender:
             else:
                 features.append("sentiment_negative")
             
-            # 7. Popularity category
+            # Popularity category
             reviews = game.get('all_reviews_count', 0)
             if reviews > 10000:
                 features.append("popularity_very_high")
@@ -158,11 +158,11 @@ class GameRecommender:
             else:
                 features.append("popularity_low")
             
-            # 8. Game categories
+            # Game categories
             if game.get('categories'):
                 features.extend([f"cat_{str(cat).lower().strip()}" for cat in game['categories'][:5]])
             
-            # 9. Memory requirements
+            # Memory requirements
             if game.get('memory_gb'):
                 mem = game['memory_gb']
                 if mem <= 4:
@@ -174,7 +174,7 @@ class GameRecommender:
                 else:
                     features.append("memory_very_high")
             
-            # 10. Storage requirements
+            # Storage requirements
             if game.get('storage_gb'):
                 storage = game['storage_gb']
                 if storage <= 10:
@@ -189,7 +189,7 @@ class GameRecommender:
         
         # Create sparse matrix
         self.game_features = self.tfidf_vectorizer.fit_transform(feature_strings)
-        print(f"✅ Comprehensive features created: {self.game_features.shape}")
+        print(f"Comprehensive features created: {self.game_features.shape}")
         print(f"   Memory: {self.game_features.data.nbytes / 1024 / 1024:.1f} MB")
         print(f"   Vocabulary size: {len(self.tfidf_vectorizer.vocabulary_)}")
         
@@ -216,7 +216,7 @@ class GameRecommender:
         if self.game_features is None:
             self.prepare_features_sparse()
         
-        print(f"🔢 Calculating top-{self.TOP_K} cosine similarities...")
+        print(f"Calculating top-{self.TOP_K} cosine similarities...")
         start = time.time()
         
         n_games = len(self.games)
@@ -253,7 +253,7 @@ class GameRecommender:
         self._save_topk_similarities('cosine', cosine_sims)
         
         elapsed = time.time() - start
-        print(f"✅ Top-{self.TOP_K} cosine calculated in {elapsed:.1f}s")
+        print(f"Top-{self.TOP_K} cosine calculated in {elapsed:.1f}s")
         return cosine_sims
     
     def calculate_pearson_topk_chunked(self):
@@ -261,7 +261,7 @@ class GameRecommender:
         if self.game_features is None:
             self.prepare_features_sparse()
         
-        print(f"📊 Calculating TRUE top-{self.TOP_K} Pearson correlations...")
+        print(f"Calculating TRUE top-{self.TOP_K} Pearson correlations...")
         start = time.time()
         
         n_games = len(self.games)
@@ -316,7 +316,7 @@ class GameRecommender:
         self._save_topk_similarities('pearson', pearson_sims)
         
         elapsed = time.time() - start
-        print(f"✅ TRUE Top-{self.TOP_K} Pearson calculated in {elapsed:.1f}s")
+        print(f"TRUE Top-{self.TOP_K} Pearson calculated in {elapsed:.1f}s")
         return pearson_sims
     
     def calculate_euclidean_topk_chunked(self):
@@ -324,7 +324,7 @@ class GameRecommender:
         if self.game_features is None:
             self.prepare_features_sparse()
         
-        print(f"📏 Calculating TRUE top-{self.TOP_K} Euclidean similarities...")
+        print(f"Calculating TRUE top-{self.TOP_K} Euclidean similarities...")
         start = time.time()
         
         n_games = len(self.games)
@@ -375,7 +375,7 @@ class GameRecommender:
         self._save_topk_similarities('euclidean', euclidean_sims)
         
         elapsed = time.time() - start
-        print(f"✅ TRUE Top-{self.TOP_K} Euclidean calculated in {elapsed:.1f}s")
+        print(f"tRUE Top-{self.TOP_K} Euclidean calculated in {elapsed:.1f}s")
         return euclidean_sims
     
     def calculate_jaccard_topk_chunked(self):
@@ -383,7 +383,7 @@ class GameRecommender:
         if self.game_features is None:
             self.prepare_features_sparse()
         
-        print(f"🎭 Calculating top-{self.TOP_K} Jaccard similarities...")
+        print(f"Calculating top-{self.TOP_K} Jaccard similarities...")
         start = time.time()
         
         n_games = len(self.games)
@@ -435,7 +435,7 @@ class GameRecommender:
         self._save_topk_similarities('jaccard', jaccard_sims)
         
         elapsed = time.time() - start
-        print(f"✅ Top-{self.TOP_K} Jaccard calculated in {elapsed:.1f}s")
+        print(f"Top-{self.TOP_K} Jaccard calculated in {elapsed:.1f}s")
         return jaccard_sims
     
     def _save_topk_similarities(self, method: str, similarities: dict):
@@ -456,7 +456,7 @@ class GameRecommender:
         with open(file_path, 'wb') as f:
             pickle.dump(compact_data, f, protocol=pickle.HIGHEST_PROTOCOL)
         
-        print(f"💾 Saved {method} top-K: {len(compact_data)} games")
+        print(f"Saved {method} top-K: {len(compact_data)} games")
     
     def _load_topk_similarities(self, method: str):
         """Load top-K similarities"""
@@ -478,39 +478,39 @@ class GameRecommender:
     
     def train_models(self):
         """Train all models efficiently"""
-        print("🚀 Training all models (Cosine, Pearson, Euclidean, Jaccard)...")
+        print("Training all models (Cosine, Pearson, Euclidean, Jaccard)...")
         start = time.time()
         
-        # Step 1: Load games
+        #Load games
         self.load_games_chunked()
         
-        # Step 2: Prepare sparse features
+        # Prepare sparse features
         self.prepare_features_sparse()
         
-        # Step 3: Calculate all similarity matrices
-        print("\n📊 Calculating 4 DIFFERENT similarity matrices...")
+        #  Calculate all similarity matrices
+        print("\nCalculating 4 DIFFERENT similarity matrices...")
         
         self.calculate_cosine_topk_chunked()
         self.calculate_pearson_topk_chunked()
         self.calculate_euclidean_topk_chunked()
         self.calculate_jaccard_topk_chunked()
         
-        # Step 4: Save base data
+        # Save base data
         self._save_base_data()
         
-        # Step 5: Verify scores are in correct range
+        #Verify scores are in correct range
         self._verify_score_ranges()
         
         elapsed = time.time() - start
-        print(f"\n✅ All models trained in {elapsed:.1f} seconds!")
-        print(f"📊 Stats: {len(self.games)} games, {self.game_features.shape[1]} features")
-        print("✅ Methods available: cosine, pearson, euclidean, jaccard")
+        print(f"\nAll models trained in {elapsed:.1f} seconds!")
+        print(f"Stats: {len(self.games)} games, {self.game_features.shape[1]} features")
+        print("Methods available: cosine, pearson, euclidean, jaccard")
         
         return True
     
     def _verify_score_ranges(self):
         """Verify that all similarity scores are in 0-1 range"""
-        print("\n🔍 Verifying score ranges...")
+        print("\nVerifying score ranges...")
         
         for method in ['cosine', 'pearson', 'euclidean', 'jaccard']:
             if method in self.top_k_similarities:
@@ -575,19 +575,19 @@ class GameRecommender:
             with open(f"{self.model_dir}/base_data.pkl", 'wb') as f:
                 pickle.dump(base_data, f, protocol=pickle.HIGHEST_PROTOCOL)
             
-            print(f"✅ Base data saved: {len(essential_games)} games")
+            print(f"Base data saved: {len(essential_games)} games")
             return True
         except Exception as e:
-            print(f"❌ Error saving base data: {e}")
+            print(f"Error saving base data: {e}")
             return False
     
     def load_models(self):
         """Load pre-trained models"""
-        print("📂 Loading models...")
+        print("Loading models...")
         
         base_path = f"{self.model_dir}/base_data.pkl"
         if not os.path.exists(base_path):
-            print("⚠️ No trained models found. Training...")
+            print("No trained models found. Training...")
             return self.train_models()
         
         try:
@@ -605,13 +605,13 @@ class GameRecommender:
                     self.top_k_similarities[method] = {}
                 self.top_k_similarities[method].update(loaded)
             
-            print(f"✅ Models loaded: {len(self.games)} games")
+            print(f"Models loaded: {len(self.games)} games")
             print(f"   Trained: {base_data.get('trained_at', 'Unknown')}")
             print(f"   Methods: {base_data.get('methods_available', [])}")
             
             return True
         except Exception as e:
-            print(f"❌ Error loading models: {e}")
+            print(f"Error loading models: {e}")
             return False
     
     def _get_similarities(self, method: str, game_idx: int) -> List[Tuple[float, int]]:
@@ -641,7 +641,7 @@ class GameRecommender:
         if not self.games:
             return {'error': 'No games available', 'recommendations': []}
         
-        print("🔍 Constraint-based filtering...")
+        print("Constraint-based filtering...")
         
         # Extract preferences with defaults
         max_price = user_preferences.get('max_price', 1000.0)
@@ -799,7 +799,7 @@ class GameRecommender:
         good = [g for g in scored_games if 50 <= g['score'] < 70][:top_n]
         partial = [g for g in scored_games if 30 <= g['score'] < 50][:top_n]
         
-        print(f"✅ Found {len(perfect)} perfect, {len(good)} good, {len(partial)} partial matches")
+        print(f"Found {len(perfect)} perfect, {len(good)} good, {len(partial)} partial matches")
         
         return {
             'perfect_matches': {'games': perfect, 'count': len(perfect)},
@@ -813,7 +813,7 @@ class GameRecommender:
         if not cases:
             return {'recommendations': [], 'error': 'No cases provided'}
         
-        print(f"🎯 Content-based ({method}) with {len(cases)} liked games...")
+        print(f"Content-based ({method}) with {len(cases)} liked games...")
         
         # Get indices for input cases
         case_indices = []
@@ -828,7 +828,7 @@ class GameRecommender:
         if not case_indices:
             return {'recommendations': [], 'error': 'No valid cases found'}
         
-        print(f"✅ Found {len(case_indices)} valid liked games")
+        print(f"Found {len(case_indices)} valid liked games")
         
         # Analyze liked games to understand user preferences
         liked_games_analysis = {
@@ -865,7 +865,7 @@ class GameRecommender:
             if 'overall_sentiment_score' in game:
                 liked_games_analysis['sentiment_range'].append(game['overall_sentiment_score'])
         
-        print(f"📊 Liked games analysis:")
+        print(f"Liked games analysis:")
         print(f"   - {len(liked_games_analysis['tags'])} unique tags")
         print(f"   - {len(liked_games_analysis['developers'])} developers")
         print(f"   - {len(liked_games_analysis['categories'])} categories")
@@ -1014,7 +1014,7 @@ class GameRecommender:
         medium = [g for g in results if 40 <= g['similarity'] < 70][:top_n]
         low = [g for g in results if 20 <= g['similarity'] < 40][:top_n]
         
-        print(f"✅ Found {len(high)} high, {len(medium)} medium, {len(low)} low similarity matches")
+        print(f"Found {len(high)} high, {len(medium)} medium, {len(low)} low similarity matches")
         
         return {
             'highly_similar': {'games': high, 'count': len(high)},
@@ -1032,10 +1032,10 @@ class GameRecommender:
     def hybrid_recommendations(self, user_preferences: Dict, cases: List[str], 
                               method: str = 'cosine', top_n: int = 10):
         """PROPER Hybrid recommendations - Intelligently combines both approaches"""
-        print(f"🤝 Hybrid recommendations ({method})...")
+        print(f" Hybrid recommendations ({method})...")
         
         if not cases:
-            print("⚠️ No liked games provided, using constraint-based only")
+            print("No liked games provided, using constraint-based only")
             return self.constraint_based_recommendations(user_preferences, top_n)
         
         # Get both recommendations
@@ -1070,7 +1070,7 @@ class GameRecommender:
         # Combine with intelligent weighting
         all_games = {}
         
-        # 1. Games that appear in BOTH constraint and content results
+        # Games that appear in BOTH constraint and content results
         for title in set(constraint_games.keys()) & set(content_games.keys()):
             constraint_data = constraint_games[title]
             content_data = content_games[title]
@@ -1117,7 +1117,7 @@ class GameRecommender:
                 'reason': f"Perfect match! Fits preferences ({constraint_score:.0f}%) and similar to liked games ({content_score:.0f}%)"
             }
         
-        # 2. Games only in constraint results (but highly ranked)
+        # Games only in constraint results (but highly ranked)
         for title, constraint_data in constraint_games.items():
             if title not in all_games and constraint_data['category'] in ['perfect_matches', 'good_matches']:
                 constraint_score = constraint_data['constraint_score']
@@ -1132,7 +1132,7 @@ class GameRecommender:
                     'reason': f"Perfectly matches your preferences ({constraint_score:.0f}%)"
                 }
         
-        # 3. Games only in content results (but highly similar)
+        # Games only in content results (but highly similar)
         for title, content_data in content_games.items():
             if title not in all_games and content_data['category'] in ['highly_similar']:
                 content_score = content_data['content_score']
@@ -1151,7 +1151,7 @@ class GameRecommender:
         hybrid_list = list(all_games.values())
         hybrid_list.sort(key=lambda x: -x['hybrid_score'])
         
-        print(f"✅ Hybrid: {len(hybrid_list[:top_n])} recommendations")
+        print(f"Hybrid: {len(hybrid_list[:top_n])} recommendations")
         print(f"   Both constraints & content: {len([g for g in hybrid_list if g['type'] == 'both'])}")
         print(f"   Constraints only: {len([g for g in hybrid_list if g['type'] == 'constraint_only'])}")
         print(f"   Content only: {len([g for g in hybrid_list if g['type'] == 'content_only'])}")
@@ -1200,19 +1200,18 @@ class GameRecommender:
                 'top_similarity': top_recs[0]['similarity'] if top_recs else 0
             }
         
-        # Check if methods give different results
+   
         method_titles = {}
         for method in methods:
             method_titles[method] = set(g['title'] for g in results[method]['recommendations'])
         
-        # Calculate pairwise overlaps
+      
         overlap_matrix = {}
         for i, m1 in enumerate(methods):
             for m2 in methods[i+1:]:
                 overlap = len(method_titles[m1] & method_titles[m2])
                 overlap_matrix[f"{m1}_{m2}"] = overlap
-        
-        # Check if all are different
+ 
         all_same = all(len(set(method_titles[m1]) - set(method_titles[m2])) == 0 
                       for m1 in methods for m2 in methods)
         
@@ -1235,6 +1234,7 @@ class GameRecommender:
             }
         }
     
+
     def get_popular_recommendations(self, top_n: int = 10):
         """Get popular games as fallback"""
         popular_games = sorted(self.games, 

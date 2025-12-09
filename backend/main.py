@@ -9,24 +9,26 @@ from contextlib import asynccontextmanager
 import sys
 import os
 
-# Add current directory to path
+# current directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import your config and modules
+# config and modules
 try:
     from config import PORT
     from src.db import db
     from src.recommender import GameRecommender
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f"Import error: {e}")
     print("Make sure you have the following structure:")
     print("  - src/db.py with MongoDB connection")
     print("  - src/recommender.py with GameRecommender class")
     print("  - config.py with PORT variable")
     raise
 
+
 # Initialize recommender
 recommender = GameRecommender(db)
+
 
 # Pydantic Models
 class SystemSpecs(BaseModel):
@@ -64,15 +66,16 @@ class HybridRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events"""
-    print("🚀 Starting Game Recommendation API...")
-    print("📊 Loading recommendation models...")
+    print("Starting Game Recommendation API...")
+    print("Loading recommendation models...")
     success = recommender.load_models()
     if success:
-        print("✅ All models loaded successfully!")
+        print("All models loaded successfully!")
     else:
-        print("⚠️ Model loading failed")
+        print("Model loading failed")
     yield
-    print("👋 Shutting down Recommendation API...")
+    print("Shutting down Recommendation API...")
+
 
 app = FastAPI(
     title="Game Recommendation API",
@@ -82,6 +85,7 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
 
 # CORS middleware
 app.add_middleware(
@@ -95,6 +99,7 @@ app.add_middleware(
 def convert_mongo_data(data):
     """Convert MongoDB data to JSON serializable format"""
     return json.loads(json_util.dumps(data))
+
 
 @app.get("/")
 def root():
@@ -133,6 +138,7 @@ def root():
         }
     }
 
+
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
@@ -164,10 +170,10 @@ def get_games(
     """Get paginated list of games with filtering"""
     skip = (page - 1) * limit
     
-    # Build filter query
+    #filter query
     filter_query = {}
     
-    # Add game type filter
+    #  game type filter
     if game_type and game_type != 'all':
         if game_type == 'free':
             filter_query["discounted_price"] = {"$eq": 0}
@@ -184,13 +190,14 @@ def get_games(
     if sort_by not in valid_sort_fields:
         sort_by = "popularity_score"
     
-    # Get games with filter
+    # games with filter
     games = list(db.steam_games.find(filter_query, {"_id": 0})
                  .sort(sort_by, sort_order)
                  .skip(skip)
                  .limit(limit))
     
-    # Get total count with filter
+
+    # total count with filter
     total = db.steam_games.count_documents(filter_query)
     
     return {
@@ -203,6 +210,7 @@ def get_games(
         "games": convert_mongo_data(games)
     }
 
+
 @app.get("/games/search")
 def search_games(
     q: str = Query(..., min_length=1, description="Search query"),
@@ -210,7 +218,7 @@ def search_games(
     game_type: Optional[str] = Query(None, description="Filter by game type: all, free, discount, paid")
 ):
     """Search games by title with game type filter"""
-    # Build base search query
+    # base search query
     search_query = {
         "$or": [
             {"title": {"$regex": q, "$options": "i"}},
@@ -218,7 +226,7 @@ def search_games(
         ]
     }
     
-    # Add game type filter if specified
+    # game type filter if specified
     if game_type and game_type != 'all':
         if game_type == 'free':
             search_query["discounted_price"] = {"$eq": 0}
@@ -262,7 +270,7 @@ def constraint_based_recommendations(request: ConstraintRequest):
     try:
         print(f"🔍 Processing constraint-based recommendation...")
         
-        # Convert preferences to dict
+        # preferences to dict
         prefs_dict = request.preferences.dict()
         
         # Call constraint-based recommender
@@ -305,7 +313,7 @@ def constraint_based_recommendations(request: ConstraintRequest):
             }
         }
     except Exception as e:
-        print(f"❌ Error in constraint-based recommendation: {e}")
+        print(f"Error in constraint-based recommendation: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -314,7 +322,7 @@ def constraint_based_recommendations(request: ConstraintRequest):
 def content_based_recommendations(request: ContentRequest):
     """CONTENT-BASED: Similarity-based recommendations"""
     try:
-        print(f"🎯 Processing content-based recommendation with {request.method} similarity...")
+        print(f"Processing content-based recommendation with {request.method} similarity...")
         
         if not request.cases:
             # Fallback to popular games
@@ -368,16 +376,17 @@ def content_based_recommendations(request: ContentRequest):
             }
         }
     except Exception as e:
-        print(f"❌ Error in content-based recommendation: {e}")
+        print(f"Error in content-based recommendation: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 @app.post("/recommend/hybrid")
 def hybrid_recommendations(request: HybridRequest):
     """HYBRID: Combine constraint-based and content-based approaches"""
     try:
-        print(f"🤝 Processing hybrid recommendation with {request.method} similarity...")
+        print(f"Processing hybrid recommendation with {request.method} similarity...")
         
         # Convert preferences to dict
         prefs_dict = request.preferences.dict()
@@ -399,10 +408,11 @@ def hybrid_recommendations(request: HybridRequest):
             "statistics": results.get('statistics', {})
         }
     except Exception as e:
-        print(f"❌ Error in hybrid recommendation: {e}")
+        print(f"Error in hybrid recommendation: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 @app.get("/similar/{game_title}")
 def get_similar_games(
@@ -443,6 +453,7 @@ def get_similar_games(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/compare/{game_title}")
 def compare_similarity_methods(
     game_title: str,
@@ -458,6 +469,7 @@ def compare_similarity_methods(
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/stats")
 def get_stats():
@@ -512,6 +524,7 @@ def get_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/tags")
 def get_tags(
     limit: int = Query(100, ge=1, le=500, description="Maximum tags to return"),
@@ -533,6 +546,7 @@ def get_tags(
         "total_unique": len(tags)
     }
 
+
 @app.get("/languages")
 def get_languages():
     """Get all supported languages"""
@@ -541,6 +555,7 @@ def get_languages():
         "languages": sorted([lang for lang in languages if lang]),
         "count": len(languages)
     }
+
 
 @app.get("/developers")
 def get_developers(
@@ -554,6 +569,7 @@ def get_developers(
         "count": len(filtered)
     }
 
+
 @app.get("/publishers")
 def get_publishers(
     limit: int = Query(100, ge=1, le=500, description="Maximum publishers to return")
@@ -566,11 +582,12 @@ def get_publishers(
         "count": len(filtered)
     }
 
+
 @app.post("/retrain")
 def retrain_model():
     """Retrain all recommendation models"""
     try:
-        print("🔄 Retraining all models...")
+        print("Retraining all models...")
         success = recommender.train_models()
         
         if success:
@@ -587,6 +604,7 @@ def retrain_model():
             raise HTTPException(status_code=500, detail="Model training failed")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-# Add backend folder (one level above src) to sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
@@ -15,7 +14,7 @@ db = client[DB_NAME]
 # Test connection
 try:
     collections = db.list_collection_names()
-    print("✅ Connected to MongoDB successfully!")
+    print("Connected to MongoDB successfully!")
     print("Collections:", collections)
 except Exception as e:
-    print("❌ Connection failed:", e)
+    print("Connection failed:", e)

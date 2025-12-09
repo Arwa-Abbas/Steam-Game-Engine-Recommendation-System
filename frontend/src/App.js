@@ -658,7 +658,7 @@ function App() {
             onClick={(e) => { e.stopPropagation(); toggleLike(game); }}
             title={liked ? 'Remove from liked' : 'Add to liked'}
           >
-            {liked ? '❤️' : '🤍'}
+            <span className="like-icon">{liked ? '❤️' : '🤍'}</span>
           </button>
           
           {hasDiscount && gameData.discount_percentage > 0 && (
@@ -698,7 +698,7 @@ function App() {
               <span>{Math.round((gameData.overall_sentiment_score || 0.5) * 100)}%</span>
             </div>
             <div className="stat" title="Reviews">
-              <span className="stat-icon">👥</span>
+              <span className="stat-icon">📝</span>
               <span>{(gameData.all_reviews_count || 0).toLocaleString()}</span>
             </div>
           </div>
@@ -764,170 +764,196 @@ function App() {
     const gameImages = getSteamImages(selectedGame);
     const gameTypeAccurate = getAccurateGameType(selectedGame);
     const hasDiscount = gameTypeAccurate === 'discount' && selectedGame.discount_percentage > 0;
+    const liked = isGameLiked(selectedGame);
     
     return (
       <div className={`game-details-modal ${showGameDetails ? 'show' : ''}`}>
         <div className="modal-backdrop" onClick={closeGameDetails}></div>
         
         <div className="modal-content">
-          <div className="modal-header">
-            <h2>{selectedGame.title}</h2>
-            <button className="close-modal-btn" onClick={closeGameDetails}>✕</button>
-          </div>
+          <button className="close-modal-btn" onClick={closeGameDetails}>✕</button>
           
           <div className="modal-body">
-            <div className="game-images">
+            <div className="game-hero">
               <img 
-                src={gameImages.header || getPlaceholderImage(selectedGame.title)}
+                src={gameImages.capsule_616 || gameImages.header || getPlaceholderImage(selectedGame.title)}
                 alt={selectedGame.title}
-                className="main-game-image"
+                className="hero-image"
                 onError={(e) => { 
                   e.target.onerror = null; 
                   e.target.src = getPlaceholderImage(selectedGame.title); 
                 }}
               />
               
-              <div className="game-badges">
-                {gameTypeAccurate === 'free' && (
-                  <span className="free-badge">FREE</span>
-                )}
-                {hasDiscount && (
-                  <span className="discount-badge-large">-{Math.round(selectedGame.discount_percentage || 0)}% OFF</span>
-                )}
-              </div>
-            </div>
-            
-            <div className="game-info-grid">
-              <div className="game-basic-info">
-                <div className="price-section">
-                  <div className="current-price">
-                    {selectedGame.discounted_price === 0 ? 'FREE' : `$${selectedGame.discounted_price?.toFixed(2) || '0.00'}`}
-                  </div>
-                  {hasDiscount && selectedGame.original_price > selectedGame.discounted_price && (
-                    <div className="original-price-large">
-                      ${selectedGame.original_price?.toFixed(2) || '0.00'}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="game-stats-detailed">
-                  <div className="stat-item">
-                    <span className="stat-label">Rating:</span>
-                    <span className="stat-value rating">
+              <div className="hero-overlay">
+                <div className="hero-content">
+                  <h1 className="game-title-large">{selectedGame.title}</h1>
+                  
+                  <div className="hero-badges">
+                    {gameTypeAccurate === 'free' && (
+                      <span className="badge-hero free">FREE TO PLAY</span>
+                    )}
+                    {hasDiscount && (
+                      <span className="badge-hero discount">-{Math.round(selectedGame.discount_percentage || 0)}% OFF</span>
+                    )}
+                    <span className="badge-hero rating">
                       ⭐ {Math.round((selectedGame.overall_sentiment_score || 0.5) * 100)}%
                     </span>
                   </div>
                   
-                  <div className="stat-item">
-                    <span className="stat-label">Reviews:</span>
-                    <span className="stat-value">
-                      {(selectedGame.all_reviews_count || 0).toLocaleString()}
-                    </span>
+                  <div className="hero-price">
+                    {selectedGame.discounted_price === 0 ? (
+                      <span className="price-free">FREE</span>
+                    ) : (
+                      <>
+                        <span className="price-current">${selectedGame.discounted_price?.toFixed(2)}</span>
+                        {hasDiscount && selectedGame.original_price > selectedGame.discounted_price && (
+                          <span className="price-original">${selectedGame.original_price?.toFixed(2)}</span>
+                        )}
+                      </>
+                    )}
                   </div>
                   
-                  <div className="stat-item">
-                    <span className="stat-label">Release Year:</span>
-                    <span className="stat-value">
-                      {selectedGame.release_year || 'N/A'}
-                    </span>
-                  </div>
-                  
-                  <div className="stat-item">
-                    <span className="stat-label">Developer:</span>
-                    <span className="stat-value">{selectedGame.developer || 'Unknown'}</span>
-                  </div>
-                  
-                  <div className="stat-item">
-                    <span className="stat-label">Publisher:</span>
-                    <span className="stat-value">{selectedGame.publisher || 'Unknown'}</span>
+                  <div className="hero-actions">
+                    <button 
+                      className={`btn-hero like ${liked ? 'liked' : ''}`}
+                      onClick={() => toggleLike(selectedGame)}
+                    >
+                      <span className="btn-icon">{liked ? '❤️' : '🤍'}</span>
+                      <span>{liked ? 'Liked' : 'Like'}</span>
+                    </button>
+                    
+                    {selectedGame.link && selectedGame.link !== '#' && (
+                      <a 
+                        href={selectedGame.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="btn-hero steam"
+                      >
+                        <span>View on Steam</span>
+                        <span className="btn-icon">→</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
-              
-              <div className="game-details-section">
-                {selectedGame.tags && selectedGame.tags.length > 0 && (
-                  <div className="details-group">
-                    <h3>Tags</h3>
-                    <div className="tags-list">
-                      {selectedGame.tags.map((tag, index) => (
-                        <span key={index} className="tag-large">{tag}</span>
-                      ))}
+            </div>
+            
+            <div className="game-details-grid">
+              <div className="details-sidebar">
+                <div className="info-card">
+                  <h3>Game Info</h3>
+                  <div className="info-list">
+                    <div className="info-item">
+                      <span className="label">Developer</span>
+                      <span className="value">{selectedGame.developer || 'Unknown'}</span>
                     </div>
-                  </div>
-                )}
-                
-                {selectedGame.features && selectedGame.features.length > 0 && (
-                  <div className="details-group">
-                    <h3>Features</h3>
-                    <div className="features-list">
-                      {selectedGame.features.map((feature, index) => (
-                        <span key={index} className="feature-item">✓ {feature}</span>
-                      ))}
+                    <div className="info-item">
+                      <span className="label">Publisher</span>
+                      <span className="value">{selectedGame.publisher || 'Unknown'}</span>
                     </div>
-                  </div>
-                )}
-                
-                {selectedGame.languages && selectedGame.languages.length > 0 && (
-                  <div className="details-group">
-                    <h3>Languages</h3>
-                    <div className="languages-list">
-                      {selectedGame.languages.map((lang, index) => (
-                        <span key={index} className="language-item">{lang}</span>
-                      ))}
+                    <div className="info-item">
+                      <span className="label">Release Year</span>
+                      <span className="value">{selectedGame.release_year || 'N/A'}</span>
                     </div>
-                  </div>
-                )}
-                
-                <div className="details-group">
-                  <h3>System Requirements</h3>
-                  <div className="system-requirements">
-                    {selectedGame.memory_gb && (
-                      <div className="requirement">
-                        <span className="req-label">Memory:</span>
-                        <span className="req-value">{selectedGame.memory_gb} GB</span>
-                      </div>
-                    )}
-                    
-                    {selectedGame.storage_gb && (
-                      <div className="requirement">
-                        <span className="req-label">Storage:</span>
-                        <span className="req-value">{selectedGame.storage_gb} GB</span>
-                      </div>
-                    )}
-                    
-                    {selectedGame.os_type && (
-                      <div className="requirement">
-                        <span className="req-label">OS:</span>
-                        <span className="req-value">{selectedGame.os_type}</span>
-                      </div>
-                    )}
-                    
-                    {selectedGame.ssd_required && (
-                      <div className="requirement">
-                        <span className="req-label">SSD:</span>
-                        <span className="req-value">Required</span>
-                      </div>
-                    )}
+                    <div className="info-item">
+                      <span className="label">Reviews</span>
+                      <span className="value">{(selectedGame.all_reviews_count || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="label">Game Type</span>
+                      <span className="value">
+                        {gameTypeAccurate === 'free' ? 'Free to Play' : 
+                         gameTypeAccurate === 'discount' ? 'Discounted' : 
+                         'Paid Game'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 
-                <div className="game-actions-large">
-                  <button 
-                    className={`like-btn-large ${isGameLiked(selectedGame) ? 'liked' : ''}`}
-                    onClick={() => toggleLike(selectedGame)}
-                  >
-                    {isGameLiked(selectedGame) ? '❤️ Liked' : '🤍 Like this Game'}
-                  </button>
+                {(selectedGame.memory_gb || selectedGame.storage_gb || selectedGame.os_type) && (
+                  <div className="info-card">
+                    <h3>System Requirements</h3>
+                    <div className="system-specs">
+                      {selectedGame.memory_gb && (
+                        <div className="spec-item">
+                          <span className="spec-label">RAM:</span>
+                          <span className="spec-value">{selectedGame.memory_gb} GB</span>
+                        </div>
+                      )}
+                      
+                      {selectedGame.storage_gb && (
+                        <div className="spec-item">
+                          <span className="spec-label">Storage:</span>
+                          <span className="spec-value">{selectedGame.storage_gb} GB</span>
+                        </div>
+                      )}
+                      
+                      {selectedGame.os_type && (
+                        <div className="spec-item">
+                          <span className="spec-label">OS:</span>
+                          <span className="spec-value">{selectedGame.os_type}</span>
+                        </div>
+                      )}
+                      
+                      {selectedGame.ssd_required && (
+                        <div className="spec-item">
+                          <span className="spec-label">SSD:</span>
+                          <span className="spec-value">Required</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="details-main">
+                <div className="details-scrollable">
+                  {selectedGame.tags && selectedGame.tags.length > 0 && (
+                    <div className="details-section">
+                      <h3>Tags</h3>
+                      <div className="tags-container">
+                        {selectedGame.tags.map((tag, index) => (
+                          <span key={index} className="tag-detail">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   
-                  {selectedGame.link && selectedGame.link !== '#' && (
-                    <a 
-                      href={selectedGame.link} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="steam-btn"
-                    >
-                      View on Steam →
-                    </a>
+                  {selectedGame.categories && selectedGame.categories.length > 0 && (
+                    <div className="details-section">
+                      <h3>Categories</h3>
+                      <div className="categories-container">
+                        {selectedGame.categories.map((category, index) => (
+                          <span key={index} className="category-detail">{category}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedGame.features && selectedGame.features.length > 0 && (
+                    <div className="details-section">
+                      <h3>Features</h3>
+                      <div className="features-container">
+                        {selectedGame.features.map((feature, index) => (
+                          <div key={index} className="feature-detail">
+                            <span className="feature-icon">✓</span>
+                            <span>{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedGame.languages && selectedGame.languages.length > 0 && (
+                    <div className="details-section">
+                      <h3>Supported Languages</h3>
+                      <div className="languages-container">
+                        {selectedGame.languages.map((language, index) => (
+                          <span key={index} className="language-detail">{language}</span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1011,13 +1037,84 @@ function App() {
     );
   };
 
+  // Render Stats Charts
+  const renderStatsCharts = () => {
+    if (!stats) return null;
+    
+    const priceStats = stats.database.price_statistics || {};
+    const topTags = stats.database.top_tags || [];
+    
+    // Create price distribution data
+    const priceDistribution = [
+      { range: 'Free', count: priceStats.free_games || 0 },
+      { range: '$0-$10', count: priceStats.under_10 || 0 },
+      { range: '$10-$20', count: priceStats.under_20 || 0 },
+      { range: '$20-$50', count: priceStats.under_50 || 0 },
+      { range: '$50+', count: priceStats.over_50 || 0 }
+    ];
+    
+    // Create top 10 tags for chart
+    const top10Tags = topTags.slice(0, 10);
+    
+    return (
+      <div className="stats-dashboard">
+        <div className="stats-row">
+          <div className="stat-chart">
+            <h4>Price Distribution</h4>
+            <div className="chart-container">
+              {priceDistribution.map((item, index) => (
+                <div key={index} className="chart-bar">
+                  <div className="bar-label">{item.range}</div>
+                  <div className="bar-track">
+                    <div 
+                      className="bar-fill" 
+                      style={{ 
+                        width: `${Math.max(5, (item.count / priceDistribution[0].count) * 100)}%`,
+                        backgroundColor: index === 0 ? '#10b981' : 
+                                        index === 1 ? '#3b82f6' : 
+                                        index === 2 ? '#8b5cf6' : 
+                                        index === 3 ? '#ec4899' : '#f59e0b'
+                      }}
+                    ></div>
+                  </div>
+                  <div className="bar-value">{item.count.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="stat-chart">
+            <h4>Top Tags</h4>
+            <div className="chart-container">
+              {top10Tags.map((tag, index) => (
+                <div key={index} className="chart-bar">
+                  <div className="bar-label">{tag._id}</div>
+                  <div className="bar-track">
+                    <div 
+                      className="bar-fill" 
+                      style={{ 
+                        width: `${(tag.count / top10Tags[0].count) * 100}%`,
+                        backgroundColor: `hsl(${index * 36}, 70%, 50%)`
+                      }}
+                    ></div>
+                  </div>
+                  <div className="bar-value">{tag.count.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Initial loading screen
   if (initialLoading) {
     return (
       <div className="initial-loading-screen">
         <div className="loading-content">
           <div className="loading-logo">
-            <h1>SteamMind</h1>
+            <h1>SteamUp!</h1>
             <p>Your Ultimate Game Discovery Platform</p>
           </div>
           <div className="loading-spinner">
@@ -1050,7 +1147,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="logo">
-            <h1>SteamMind</h1>
+            <h1>SteamUp!</h1>
           </div>
           
           <nav className="nav-tabs">
@@ -1122,13 +1219,15 @@ function App() {
                   </button>
                 </div>
                 
-                <select value={sortBy} onChange={handleSortChange} className="sort-select">
-                  <option value="popularity">Sort by Popularity</option>
-                  <option value="alphabetical">Sort A-Z</option>
-                  <option value="price-low">Price: Low to High</option>
-                  <option value="price-high">Price: High to Low</option>
-                  <option value="rating">Rating</option>
-                </select>
+                <div className="sort-container">
+                  <select value={sortBy} onChange={handleSortChange} className="sort-select">
+                    <option value="popularity">Sort by Popularity</option>
+                    <option value="alphabetical">Sort A-Z</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                    <option value="rating">Rating</option>
+                  </select>
+                </div>
               </div>
             </div>
             
@@ -1175,7 +1274,7 @@ function App() {
             
             {likedGames.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">💔</div>
+                <div className="empty-icon">📋</div>
                 <h3>No liked games yet</h3>
                 <p>Start exploring and click the heart icon on games you like!</p>
                 <button onClick={() => setActiveTab('explore')} className="btn-primary">
@@ -1336,14 +1435,19 @@ function App() {
                     ))}
                   </div>
                   <select 
-                  onChange={(e) => { if (e.target.value) { addItem('languages', e.target.value); e.target.value = ''; } }}
-                  className="dropdown-select"  // ADD THIS CLASS
-                >
-                  <option value="">Select language...</option>
-                  {availableLanguages.map(lang => (
-                    <option key={lang} value={lang}>{lang}</option>
-                  ))}
-                </select>
+                    onChange={(e) => { 
+                      if (e.target.value) { 
+                        addItem('languages', e.target.value); 
+                        e.target.value = ''; 
+                      }
+                    }}
+                    className="dropdown-select"
+                  >
+                    <option value="">Select language...</option>
+                    {availableLanguages.map(lang => (
+                      <option key={lang} value={lang}>{lang}</option>
+                    ))}
+                  </select>
                 </div>
                 
                 <div className="filter-group">
@@ -1434,6 +1538,7 @@ function App() {
                             memory_gb: e.target.value ? parseInt(e.target.value) : null
                           }
                         }))}
+                        className="spec-select"
                       >
                         <option value="">Any</option>
                         <option value="2">2 GB</option>
@@ -1455,6 +1560,7 @@ function App() {
                             storage_gb: e.target.value ? parseInt(e.target.value) : null
                           }
                         }))}
+                        className="spec-select"
                       >
                         <option value="">Any</option>
                         <option value="10">10 GB</option>
@@ -1475,6 +1581,7 @@ function App() {
                             os_type: e.target.value || ''
                           }
                         }))}
+                        className="spec-select"
                       >
                         <option value="">Any</option>
                         <option value="windows">Windows</option>
@@ -1501,31 +1608,6 @@ function App() {
                     </div>
                   </div>
                 </div>
-                
-                {/* <div className="filter-group">
-                  <label>Min Sentiment: {Math.round(preferences.min_sentiment * 100)}%</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={preferences.min_sentiment * 100}
-                    onChange={(e) => setPreferences(prev => ({ ...prev, min_sentiment: parseInt(e.target.value) / 100 }))}
-                    className="slider" 
-                  />
-                </div> */}
-{/*                 
-                <div className="filter-group">
-                  <label>Min Reviews: {preferences.min_reviews}</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="10000" 
-                    step="100" 
-                    value={preferences.min_reviews}
-                    onChange={(e) => setPreferences(prev => ({ ...prev, min_reviews: parseInt(e.target.value) }))}
-                    className="slider" 
-                  />
-                </div> */}
               </div>
               
               <button onClick={getConstraintRecommendations} className="btn-primary">
@@ -1542,7 +1624,7 @@ function App() {
               <div className="recommendations-container">
                 {recommendations.data.results.perfect_matches?.games?.length > 0 && (
                   <div className="recommendation-category">
-                    <h3> Best Matches </h3>
+                    <h3>Best Matches</h3>
                     <div className="games-grid">
                       {recommendations.data.results.perfect_matches.games.map((game, index) => 
                         renderGameCard(game, index, true)
@@ -1553,7 +1635,7 @@ function App() {
                 
                 {recommendations.data.results.good_matches?.games?.length > 0 && (
                   <div className="recommendation-category">
-                    <h3> What you make like  </h3>
+                    <h3>What you might like</h3>
                     <div className="games-grid">
                       {recommendations.data.results.good_matches.games.map((game, index) => 
                         renderGameCard(game, index, true)
@@ -1577,7 +1659,7 @@ function App() {
                  recommendations.data.results.good_matches?.games?.length === 0 && 
                  recommendations.data.results.partial_matches?.games?.length === 0 && (
                   <div className="empty-state">
-                    <div className="empty-icon"> </div>
+                    <div className="empty-icon">🎯</div>
                     <h3>No matches found</h3>
                     <p>Try relaxing your constraints or select different preferences.</p>
                   </div>
@@ -1585,7 +1667,7 @@ function App() {
               </div>
             ) : (
               <div className="empty-state">
-                <div className="empty-icon"> </div>
+                <div className="empty-icon">⚙️</div>
                 <h3>No recommendations yet</h3>
                 <p>Set your preferences and click the button above!</p>
               </div>
@@ -1603,12 +1685,12 @@ function App() {
                 <button className={`method-btn ${hybridMethod === 'cosine' ? 'active' : ''}`} onClick={() => setHybridMethod('cosine')}>Cosine</button>
                 <button className={`method-btn ${hybridMethod === 'pearson' ? 'active' : ''}`} onClick={() => setHybridMethod('pearson')}>Pearson</button>
                 <button className={`method-btn ${hybridMethod === 'euclidean' ? 'active' : ''}`} onClick={() => setHybridMethod('euclidean')}>Euclidean</button>
-                 <button className={`method-btn ${hybridMethod === 'jaccard' ? 'active' : ''}`} onClick={() => setHybridMethod('jaccard')}>Jaccard</button>
+                <button className={`method-btn ${hybridMethod === 'jaccard' ? 'active' : ''}`} onClick={() => setHybridMethod('jaccard')}>Jaccard</button>
               </div>
             </div>
             
             <button onClick={getHybridRecommendations} className="btn-primary" disabled={likedGames.length === 0}>
-              Get Hybrid Recommendations
+              🔀 Get Hybrid Recommendations
             </button>
             
             {loading ? (
@@ -1627,7 +1709,7 @@ function App() {
               </div>
             ) : (
               <div className="empty-state">
-                <div className="empty-icon"></div>
+                <div className="empty-icon">🔀</div>
                 <h3>No recommendations yet</h3>
                 <p>Like some games and set constraints, then click the button above!</p>
               </div>
@@ -1638,7 +1720,9 @@ function App() {
         {/* STATS TAB */}
         {activeTab === 'stats' && stats && (
           <div className="tab-content">
-            <h2>Platform Statistics</h2>
+            <div className="section-header">
+              <h2>Platform Statistics</h2>
+            </div>
             
             <div className="stats-grid">
               <div className="stat-card">
@@ -1660,9 +1744,21 @@ function App() {
               </div>
               
               <div className="stat-card">
+                <div className="stat-icon">⭐</div>
+                <div className="stat-value">{Math.round((stats.database.average_sentiment || 0.5) * 100)}%</div>
+                <div className="stat-label">Avg Rating</div>
+              </div>
+              
+              <div className="stat-card">
                 <div className="stat-icon">💎</div>
                 <div className="stat-value">${stats.database.price_statistics?.max_price?.toFixed(2) || '0.00'}</div>
                 <div className="stat-label">Highest Price</div>
+              </div>
+              
+              <div className="stat-card">
+                <div className="stat-icon">📊</div>
+                <div className="stat-value">{stats.database.price_statistics?.discounted_games || 0}</div>
+                <div className="stat-label">Discounted Games</div>
               </div>
             </div>
             
@@ -1677,8 +1773,19 @@ function App() {
                   <span className="label">Features:</span>
                   <span className="value">{stats.model.feature_dimensions}</span>
                 </div>
+                <div className="model-stat">
+                  <span className="label">Last Updated:</span>
+                  <span className="value">{new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="model-stat">
+                  <span className="label">Recommendation Models:</span>
+                  <span className="value">3</span>
+                </div>
               </div>
             </div>
+            
+            {/* Enhanced Stats Dashboard with Charts */}
+            {renderStatsCharts()}
             
             {stats.database.top_tags && (
               <div className="tags-cloud">
@@ -1698,7 +1805,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>GameFinder Pro • Advanced Recommendation System</p>
+        <p>SteamUp! • Advanced Game Recommendation System</p>
       </footer>
 
       {/* Game Details Modal */}

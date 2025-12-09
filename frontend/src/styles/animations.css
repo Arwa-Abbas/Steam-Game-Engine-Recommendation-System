@@ -311,14 +311,14 @@
   animation: slideInBottom 0.5s ease-out;
 }
 
-/* Gradient Animation */
+
 .animated-gradient {
   background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
   background-size: 400% 400%;
   animation: gradientShift 15s ease infinite;
 }
 
-/* Pulse Ring */
+
 .pulse-ring {
   display: block;
   border-radius: 50%;
@@ -337,7 +337,6 @@
   }
 }
 
-/* Typing Animation */
 @keyframes typing {
   from { width: 0 }
   to { width: 100% }
@@ -349,7 +348,6 @@
   animation: typing 3.5s steps(40, end);
 }
 
-/* Blink Cursor */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -359,7 +357,7 @@
   animation: blink 1s infinite;
 }
 
-/* Stagger Children Animation */
+
 .stagger-children > * {
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
@@ -568,7 +566,7 @@
   }
 }
 
-/* Wave Animation */
+
 @keyframes wave {
   0% {
     transform: rotate(0deg);
@@ -604,7 +602,7 @@
   display: inline-block;
 }
 
-/* Neon Glow */
+
 .neon-glow {
   color: #fff;
   text-shadow:
@@ -618,7 +616,7 @@
     0 0 151px #667eea;
 }
 
-/* Spin Animation */
+
 @keyframes spin-slow {
   from {
     transform: rotate(0deg);
@@ -632,7 +630,7 @@
   animation: spin-slow 3s linear infinite;
 }
 
-/* Breathe Animation */
+
 @keyframes breathe {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }

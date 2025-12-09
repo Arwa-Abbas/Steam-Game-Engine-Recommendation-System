@@ -38,7 +38,7 @@ const GameDetailModal = ({ game, onClose, onOpenSteam }) => {
                   className="steam-button"
                   onClick={() => onOpenSteam(game.link)}
                 >
-                  <span>🎮 View on Steam</span>
+                  <span> View on Steam</span>
                 </button>
               )}
             </div>

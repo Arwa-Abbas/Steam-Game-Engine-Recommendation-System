@@ -104,8 +104,7 @@ def calculate_popularity_score(all_reviews_count, recent_reviews_count,
     if all_reviews_count == 0:
         return 0.0
     
-    # Review count score (logarithmic scale to handle wide ranges)
-    # Games with 1M+ reviews should get close to 1.0
+   
     import math
     max_reviews = 1000000  #
     review_score = min(1.0, math.log10(all_reviews_count + 1) / math.log10(max_reviews))
@@ -425,7 +424,7 @@ def load_records(csv_path="dataset/steam_game_engine.csv", append=False):
                     "link": clean_text(row.get("Link", "")),
                     "description": description,
                     
-                    # Reviews (separate fields, not nested)
+                    # Reviews 
                     "recent_reviews_summary": recent_review_text,
                     "recent_reviews_count": recent_reviews_count,
                     "recent_sentiment_score": recent_sentiment_score,
