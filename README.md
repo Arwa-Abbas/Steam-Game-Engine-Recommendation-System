@@ -56,8 +56,8 @@ Game Recommendation System
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Arwa-Abbas/SteamMind--Game-Engine-Recommendation-System.git
-cd SteamMind--Game-Engine-Recommendation-System
+git clone https://github.com/Arwa-Abbas/SteamUP--Game-Engine-Recommendation-System.git
+cd SteamUP--Game-Engine-Recommendation-System
 cd backend
 ```
 ### 2. Create virtual environment in backend
