@@ -1,6 +1,6 @@
-# SteamMind – Game Engine Recommendation System #
+# SteamUP! – Game Engine Recommendation System #
 
-SteamMind is an advanced game recommendation platform that leverages both **knowledge-based (constraint-driven)** and **content-based filtering** techniques to provide personalized game suggestions. Built with **FastAPI** and **MongoDB**, the system combines sophisticated similarity metrics, user preferences, and game metadata to deliver accurate and explainable recommendations for gamers.
+SteamUP! is an advanced game recommendation platform that leverages both **knowledge-based (constraint-driven)** and **content-based filtering** techniques to provide personalized game suggestions. Built with **FastAPI** and **MongoDB**, the system combines sophisticated similarity metrics, user preferences, and game metadata to deliver accurate and explainable recommendations for gamers.
 
 ---
 
@@ -56,8 +56,8 @@ Game Recommendation System
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Arwa-Abbas/SteamMind--Game-Engine-Recommendation-System.git
-cd SteamMind--Game-Engine-Recommendation-System
+git clone https://github.com/Arwa-Abbas/SteamUP--Game-Engine-Recommendation-System.git
+cd SteamUP--Game-Engine-Recommendation-System
 cd backend
 ```
 ### 2. Create virtual environment in backend
